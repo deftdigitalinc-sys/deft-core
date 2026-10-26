@@ -5,7 +5,8 @@
  * Signed-in staff see a small dock at the bottom of any Deft page. Press Edit (or E): the editable parts outline on
  * hover, a click lets you type in place, images swap from the Media Library. Review lists every change as a before and
  * after; Publish saves a new version (deft_pages_publish), clears the cache and says "Live" with how long it took.
- * History lists the last 30 days of versions, each one a click from being restored.
+ * Revisions lists the last 30 days of versions, each one a click from being restored. Phone shows the page at 390px
+ * with the unsaved changes in it, and "ask Claude" sends one block of words to Central for a version (staff only).
  *
  * Only elements with a data-deft-edit marker can change, and only their text (inline tags), image or link address
  * (includes/html.php). The page's design, scripts and styles are never sent back from the browser.
@@ -72,6 +73,7 @@ function deft_live_enqueue() {
 				),
 				'admin'     => admin_url( 'admin.php?page=deft-pages&post=' . $post_id ),
 				'user'      => $user->display_name,
+				'ask'       => deft_central_configured(),
 				'autostart' => isset( $_GET['deft_edit'] ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			)
 		) . ';',
@@ -107,6 +109,27 @@ function deft_live_routes() {
 			'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
 		)
 	);
+	register_rest_route(
+		'deft/v1',
+		'/pages/(?P<id>\d+)/suggest',
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'deft_live_rest_suggest',
+			'permission_callback' => 'deft_live_rest_staff',
+			'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+		)
+	);
+}
+
+/** Signed-in Deft staff with Live Edit on. Central never calls this one. */
+function deft_live_rest_staff() {
+	if ( ! is_user_logged_in() || ! deft_pages_is_staff() ) {
+		return new WP_Error( 'deft_not_staff', __( 'Only Deft staff can use Live Edit on this site.', 'deft-core' ), array( 'status' => 403 ) );
+	}
+	if ( ! deft_live_enabled() ) {
+		return new WP_Error( 'deft_live_off', __( 'Live Edit is switched off on this site (Settings > Deft > Deft pages).', 'deft-core' ), array( 'status' => 403 ) );
+	}
+	return true;
 }
 
 /** Staff signed in with Live Edit on, or Central (signed) once Studio publishing is on: Claude's "make it shorter" uses this too. */
@@ -182,6 +205,47 @@ function deft_live_rest_edits( WP_REST_Request $request ) {
 			'changes'       => $applied['changes'],
 			'draft_updated' => $draft_updated,
 			'ms'            => (int) round( ( microtime( true ) - $started ) * 1000 ),
+		)
+	);
+}
+
+/**
+ * "Ask Claude for a version" of one block of words. Body: tag, text (plain), ask. Signed to Central as
+ * deft.copy_suggest.v1, which writes it from what's on file for this client. Nothing changes here until the staff
+ * member picks Use this and publishes.
+ */
+function deft_live_rest_suggest( WP_REST_Request $request ) {
+	$post = deft_pages_rest_page( $request );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	if ( ! deft_central_configured() ) {
+		return new WP_Error( 'deft_central_off', __( 'Connect this site to Deft Central first (Settings > Deft).', 'deft-core' ), array( 'status' => 409 ) );
+	}
+	$text = trim( sanitize_textarea_field( (string) $request['text'] ) );
+	$ask  = trim( sanitize_text_field( (string) $request['ask'] ) );
+	if ( '' === $text || '' === $ask ) {
+		return new WP_Error( 'deft_suggest_empty', __( 'Pick some words and say what the new version should do.', 'deft-core' ), array( 'status' => 400 ) );
+	}
+	$user  = wp_get_current_user();
+	$reply = deft_central_post(
+		array(
+			'schema'  => 'deft.copy_suggest.v1',
+			'page'    => array( 'id' => $post->ID, 'title' => get_the_title( $post ), 'url' => get_permalink( $post ) ),
+			'element' => array( 'tag' => sanitize_key( (string) $request['tag'] ), 'text' => mb_substr( $text, 0, 4000 ) ),
+			'ask'     => mb_substr( $ask, 0, 500 ),
+			'actor'   => $user->display_name,
+		),
+		60
+	);
+	if ( ! $reply['ok'] ) {
+		$message = $reply['body']['message'] ?? __( 'Claude could not answer just now. Your words are as they were.', 'deft-core' );
+		return new WP_Error( 'deft_suggest_failed', $message, array( 'status' => 502, 'code' => $reply['body']['code'] ?? '' ) );
+	}
+	return rest_ensure_response(
+		array(
+			'text' => sanitize_textarea_field( (string) ( $reply['body']['text'] ?? '' ) ),
+			'note' => sanitize_text_field( (string) ( $reply['body']['note'] ?? '' ) ),
 		)
 	);
 }

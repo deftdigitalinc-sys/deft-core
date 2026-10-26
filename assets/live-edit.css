@@ -185,7 +185,7 @@ kbd {
 }
 .chip.show { opacity: 1; transform: none; }
 
-.toolbar, .popover {
+.toolbar, .popover, .ask {
 	position: fixed;
 	z-index: 2147483002;
 	color: var(--text);
@@ -200,7 +200,7 @@ kbd {
 	transform: translateY(4px) scale(.98);
 	transition: opacity .14s, transform .18s var(--ease), visibility 0s .18s;
 }
-.toolbar.show, .popover.show { visibility: visible; opacity: 1; transform: none; transition: opacity .14s, transform .18s var(--ease); }
+.toolbar.show, .popover.show, .ask.show { visibility: visible; opacity: 1; transform: none; transition: opacity .14s, transform .18s var(--ease); }
 
 .toolbar { display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; }
 .tb-label { padding: 0 10px 0 8px; font: 600 10px/1 var(--label); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -297,7 +297,7 @@ ins { text-decoration: none; background: var(--sunflower); color: var(--ink); bo
 .img-diff img.before { opacity: .55; filter: grayscale(.6); }
 
 .timeline { padding: 16px 18px 24px 22px; }
-.timeline > li { position: relative; display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding-bottom: 18px; }
+.timeline > li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding-bottom: 18px; }
 .timeline > li::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: -2px; width: 2px; background: var(--line); }
 .timeline > li:last-child::before { display: none; }
 .timeline > li.loading, .timeline > li.error, .timeline > li.empty { display: block; color: var(--muted); }
@@ -307,8 +307,82 @@ ins { text-decoration: none; background: var(--sunflower); color: var(--ink); bo
 .rev { display: grid; gap: 6px; }
 .rev-head { margin: 0; color: var(--muted); font-size: 13px; }
 .rev-head b { color: var(--text); font-weight: 600; }
+.rev-what { margin: 0; color: var(--text); font-weight: 600; font-size: 14px; line-height: 1.35; }
+.timeline .tag.live { margin: 0; }
 .mini { margin: 0; padding: 0 0 0 16px; color: var(--muted); font-size: 12.5px; display: grid; gap: 4px; line-height: 1.5; }
 .mini ins { font-size: 12px; }
+
+/* ---------- Ask Claude for a version ---------- */
+
+.ask { width: min(460px, calc(100vw - 16px)); padding: 10px; border-radius: var(--radius); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ask > .tb-label { width: 100%; padding: 2px 4px 4px; }
+.ask-chip {
+	height: 32px;
+	padding: 0 12px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--obsidian-3);
+	font: 500 13px/1 var(--sans);
+	transition: background .15s;
+}
+.ask-chip:hover { background: #2E2E34; }
+.ask-own { display: flex; gap: 6px; width: 100%; margin-top: 2px; }
+.ask-own input[type="text"] { height: 34px; flex: 1; font-size: 13px; }
+.ask-wait { margin: 0; padding: 4px; display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.ask-wait .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sunflower); animation: pulse 1.2s infinite; }
+.ask .error { width: 100%; padding: 4px; font-size: 13px; }
+.proposal { display: grid; gap: 10px; width: 100%; padding: 2px 4px; }
+.proposal p { margin: 0; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }
+.proposal .tb-label { padding: 0; }
+.proposal .was { color: var(--muted); }
+.proposal .new { color: var(--text); font-weight: 500; }
+
+/* ---------- Replace photo ---------- */
+
+.photo-btn {
+	position: fixed;
+	z-index: 2147483001;
+	display: none;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding: 0 16px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: rgba(11, 11, 12, .88);
+	-webkit-backdrop-filter: blur(12px);
+	backdrop-filter: blur(12px);
+	color: var(--text);
+	font: 500 14px/1 var(--sans);
+	box-shadow: 0 10px 28px -8px rgba(0, 0, 0, .5);
+}
+.photo-btn.show { display: inline-flex; }
+.photo-btn:hover { background: var(--obsidian); }
+
+/* ---------- Desktop and Phone ---------- */
+
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--obsidian-3); }
+.seg-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: 500 13px/1 var(--sans); }
+.seg-btn[aria-pressed="true"] { background: var(--obsidian); color: var(--text); }
+.seg-btn .i { width: 16px; height: 16px; }
+.phone {
+	position: fixed;
+	inset: 0;
+	z-index: 2147482990;
+	display: none;
+	place-items: center;
+	padding: 16px 16px 96px;
+	background: rgba(11, 11, 12, .92);
+	-webkit-backdrop-filter: blur(8px);
+	backdrop-filter: blur(8px);
+	animation: toast-in .3s var(--ease) both;
+}
+.phone.show { display: grid; }
+.phone-col { display: grid; justify-items: center; }
+.phone-fit { position: relative; }
+.device { position: absolute; top: 0; left: 0; width: 414px; height: 868px; padding: 12px; border-radius: 54px; background: var(--obsidian-2); box-shadow: 0 0 0 1px var(--line), 0 40px 90px -20px rgba(0, 0, 0, .7); transform-origin: top left; }
+.device iframe { display: block; width: 390px; height: 844px; border: 0; border-radius: 42px; background: #fff; }
+.phone-note { margin: 14px 0 0; color: var(--muted); font: 500 13px/1.4 var(--sans); text-align: center; }
 
 /* ---------- Toasts ---------- */
 
@@ -338,7 +412,7 @@ ins { text-decoration: none; background: var(--sunflower); color: var(--ink); bo
 
 @media (max-width: 640px) {
 	.dock { left: 10px; right: 10px; transform: none; gap: 2px; padding: 6px; justify-content: space-between; animation-name: dock-in-sm; }
-	.dock .sep, .dock .pill-note { display: none; }
+	.dock .sep, .dock .pill-note, .dock .seg { display: none; }
 	.dock .btn { padding: 0 14px; }
 	.brand { width: 36px; height: 36px; }
 	.icon-btn { width: 38px; height: 38px; }

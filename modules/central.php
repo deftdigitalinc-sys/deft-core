@@ -222,13 +222,13 @@ function deft_central_payload( $lead_id ) {
  * Signs and posts a body to Central.
  * Returns ok, retry (worth trying again later), body (decoded reply) and a short error for the Leads screen.
  */
-function deft_central_post( $payload ) {
+function deft_central_post( $payload, $timeout = 15 ) {
 	$body      = wp_json_encode( $payload );
 	$timestamp = time();
 	$response  = wp_remote_post(
 		deft_central_url(),
 		array(
-			'timeout' => 15,
+			'timeout' => (int) $timeout,
 			'headers' => array(
 				'Content-Type'     => 'application/json',
 				'X-Deft-Site'      => deft_core_setting( 'central_site_id' ),

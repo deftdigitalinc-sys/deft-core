@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.1
+Stable tag: 0.9.2
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,12 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.2 =
+* Live Edit: Desktop and Phone switch. Phone shows the page 390 px wide with your unsaved changes in it; click any outlined part to go back and edit it.
+* Live Edit: pick a block of plain words and ask Claude for a version (Make it shorter, In their voice, Add the city, or your own words). Claude writes from what Deft Central has on file for the client and never invents facts. You see Now and Claude suggests side by side, then Use this or Keep mine. Nothing changes until you publish. Needs the site connected to Deft Central.
+* Live Edit: a Replace photo button on the image under the pointer opens the Media Library straight away.
+* Live Edit: Revisions shows what changed, who and when, with Live on the current one and Restore on the others. Still kept 30 days.
 
 = 0.9.1 =
 * Move off Elementor: every page row shows a thumbnail of the page. Compare opens right under the board with the live page and the Deft draft side by side, scrolling together, and what the check found is outlined and numbered on the page. Click a difference to jump to it. Full screen still has the slider and flip.
