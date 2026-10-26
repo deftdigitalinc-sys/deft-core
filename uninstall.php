@@ -32,6 +32,7 @@ global $wpdb;
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_agent_log" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 delete_option( 'deft_agent_tokens' );
 delete_option( 'deft_agent_db' );
+delete_option( 'deft_watch_mail' );
 $deft_backup_key = get_option( 'deft_agent_backup_key' );
 if ( $deft_backup_key && ! empty( $deft_settings['delete_on_uninstall'] ) ) {
 	$deft_uploads    = wp_upload_dir( null, false );
