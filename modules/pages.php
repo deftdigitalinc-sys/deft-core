@@ -451,9 +451,10 @@ function deft_pages_current( $post_id ) {
 			'html'    => deft_html_mark( (string) $page['draft']['html'] ),
 			'head'    => (string) $page['draft']['head'],
 			'preview' => true,
+			'hash'    => (string) ( $page['draft']['hash'] ?? '' ),
 		);
 	}
-	return array( 'html' => $page['html'], 'head' => $page['head'], 'preview' => false );
+	return array( 'html' => $page['html'], 'head' => $page['head'], 'preview' => false, 'hash' => $page['hash'] );
 }
 
 add_action( 'wp_head', 'deft_pages_head', 1 );
@@ -463,6 +464,8 @@ function deft_pages_head() {
 	}
 	$current = deft_pages_current( get_queried_object_id() );
 	echo '<style id="deft-page-base">body.deft-page{margin:0}</style>' . "\n";
+	// Which version this is, so Live Edit can check the public page really shows what was just published.
+	echo '<meta name="deft-page" content="' . esc_attr( substr( $current['hash'], 0, 12 ) ) . '">' . "\n";
 	echo $current['head']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- staff-written markup, stored as-is on purpose.
 }
 

@@ -74,8 +74,10 @@ button:disabled { cursor: default; opacity: .4; }
 .dock[data-state="editing"] .brand .logo { color: var(--ink); }
 .dock[data-state="editing"] .brand .logo path { stroke: var(--sunflower); }
 
-.label { display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
-.label b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.label { display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; max-width: 46ch; }
+.label b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.label .eyebrow { flex: none; color: var(--sunflower); font-family: var(--label); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.label .muted { flex: none; color: var(--muted); white-space: nowrap; margin-left: -4px; }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sunflower); box-shadow: 0 0 0 0 rgba(255, 199, 0, .6); animation: pulse 2s infinite; flex: none; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(255, 199, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 199, 0, 0); } }
 
@@ -328,7 +330,7 @@ ins { text-decoration: none; background: var(--sunflower); color: var(--ink); bo
 .toast.good .i { color: var(--good); stroke-width: 2.4; }
 .toast.out { opacity: 0; transform: translateY(8px); }
 .toast-text { flex: 1; }
-.link { border: 0; background: none; color: var(--sunflower); font-weight: 600; padding: 6px 8px; border-radius: 8px; }
+.link { border: 0; background: none; color: var(--sunflower); font: inherit; font-weight: 600; padding: 6px 8px; border-radius: 8px; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .link:hover { background: var(--obsidian-3); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 

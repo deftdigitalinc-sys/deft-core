@@ -350,9 +350,9 @@
 		var page = document.createElement( 'style' );
 		page.id = 'deft-le-page';
 		page.textContent = [
-			'html.deft-le-on [data-deft-edit]{outline:1.5px dashed transparent;outline-offset:3px;transition:outline-color .16s,background-color .16s;cursor:text}',
+			'html.deft-le-on [data-deft-edit]{outline:1.5px dashed rgba(51,80,240,.38);outline-offset:3px;transition:outline-color .16s,background-color .16s;cursor:text}',
 			'html.deft-le-on [data-deft-edit^="i"],html.deft-le-on [data-deft-edit^="l"]{cursor:pointer}',
-			'html.deft-le-on [data-deft-edit]:hover{outline-color:rgba(51,80,240,.6)}',
+			'html.deft-le-on [data-deft-edit]:hover{outline-style:solid;outline-color:rgba(51,80,240,.75)}',
 			'html.deft-le-on [data-deft-le="changed"]{outline:2px solid rgba(255,199,0,.95);outline-offset:3px}',
 			'html.deft-le-on [data-deft-le="active"]{outline:2px solid #3350F0;outline-offset:3px;cursor:text;caret-color:#3350F0}',
 			'html.deft-le-on [data-deft-le="flash"]{outline:3px solid #FFC700;outline-offset:6px}',
@@ -395,6 +395,7 @@
 		var el = h( 'div', { class: 'toast' + ( options.tone ? ' ' + options.tone : '' ), role: 'status' }, [
 			options.tone === 'good' ? icon( 'check' ) : null,
 			h( 'span', { class: 'toast-text', text: text } ),
+			options.link ? h( 'a', { class: 'link', href: options.link.href, target: '_blank', rel: 'noopener', text: options.link.label + ' ↗' } ) : null,
 			options.action ? h( 'button', { class: 'link', text: options.action.label, onclick: function () {
 				el.remove();
 				options.action.run();
@@ -437,7 +438,7 @@
 			if ( cfg.draft ) {
 				dock.appendChild( h( 'span', { class: 'pill-note', title: 'Saved by ' + cfg.draft.by + ' ' + ago( cfg.draft.saved ) + '. Your Live Edit changes are copied into it.' }, [ 'Studio draft waiting' ] ) );
 			}
-			dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'History', title: 'History', onclick: function () {
+			dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Revisions', title: 'Revisions', onclick: function () {
 				openPanel( 'history' );
 			} }, [ icon( 'history' ) ] ) );
 			return;
@@ -460,16 +461,16 @@
 			return;
 		}
 
-		dock.appendChild( h( 'span', { class: 'label' }, [ h( 'span', { class: 'live-dot' } ), 'Editing ', h( 'b', { text: cfg.title } ) ] ) );
-		dock.appendChild( h( 'span', { class: 'count' + ( count ? ' has' : '' ), 'aria-live': 'polite' }, [ count ? plural( count, 'change', 'changes' ) : h( 'span', {}, [ 'No changes', h( 'span', { class: 'hide-sm', text: ' yet' } ) ] ) ] ) );
+		dock.appendChild( h( 'span', { class: 'label' }, [ h( 'span', { class: 'eyebrow', text: 'Live Edit' } ), h( 'b', { text: cfg.title } ), h( 'span', { class: 'hide-sm muted', text: ' · Deft staff only' } ) ] ) );
+		dock.appendChild( h( 'span', { class: 'count' + ( count ? ' has' : '' ), 'aria-live': 'polite' }, [ count ? plural( count, 'change', 'changes' ) : 'No changes', count ? h( 'span', { class: 'hide-sm', text: ', not live yet' } ) : null ] ) );
 		dock.appendChild( h( 'span', { class: 'sep' } ) );
 		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Undo last change', title: 'Undo last change', disabled: ! count, onclick: undoLast }, [ icon( 'undo' ) ] ) );
-		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'History', title: 'History', onclick: function () {
+		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Revisions', title: 'Revisions', onclick: function () {
 			openPanel( 'history' );
 		} }, [ icon( 'history' ) ] ) );
 		dock.appendChild( h( 'button', { class: 'btn primary', disabled: ! count, 'aria-keyshortcuts': 'Control+S Meta+S', onclick: function () {
 			openPanel( 'review' );
-		} }, [ 'Review', h( 'span', { class: 'hide-sm', text: '& publish' } ) ] ) );
+		} }, [ 'Publish', h( 'span', { 'aria-hidden': 'true', text: '→' } ) ] ) );
 		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Stop editing', title: 'Stop editing (Esc)', onclick: function () {
 			stop();
 		} }, [ icon( 'close' ) ] ) );
@@ -914,7 +915,7 @@
 	var SOURCE = { 'live-edit': 'Live Edit', studio: 'Studio', restore: 'Restored', migration: 'Moved off Elementor', admin: 'Deft pages screen' };
 
 	function renderHistory( panel ) {
-		panel.appendChild( panelHead( 'History', 'Every version that went live, 30 days' ) );
+		panel.appendChild( panelHead( 'Revisions', 'Every version that went live, kept 30 days' ) );
 		var list = h( 'ol', { class: 'timeline' }, [ h( 'li', { class: 'loading', text: 'Loading versions…' } ) ] );
 		panel.appendChild( list );
 		api( '/revisions' ).then( function ( data ) {
@@ -984,27 +985,22 @@
 		deactivate();
 		closePanel();
 		var startedAt = performance.now();
-		state.busy = [
-			{ label: 'Saving a new version', state: 'now' },
-			{ label: 'Clearing the cache', state: 'wait' },
-			{ label: 'Live', state: 'wait' }
-		];
-		renderDock();
+		var steps = [ 'Saving a revision', 'Clearing the cache', 'Checking the live page' ];
+		function progress( at ) {
+			state.busy = steps.map( function ( label, i ) {
+				return { label: label, state: i < at ? 'done' : ( i === at ? 'now' : 'wait' ) };
+			} );
+			renderDock();
+		}
+		progress( 0 );
 		var stepTimer = setTimeout( function () {
 			if ( state.busy ) {
-				state.busy[ 0 ].state = 'done';
-				state.busy[ 1 ].state = 'now';
-				renderDock();
+				progress( 1 );
 			}
 		}, 450 );
 		api( '/edits', { method: 'POST', body: { base: state.base, edits: edits, note: note || '' } } ).then( function ( data ) {
 			clearTimeout( stepTimer );
-			state.busy = [
-				{ label: 'Saved', state: 'done' },
-				{ label: 'Cache cleared', state: 'done' },
-				{ label: 'Live in ' + ( ( performance.now() - startedAt ) / 1000 ).toFixed( 1 ) + ' s', state: 'done' }
-			];
-			renderDock();
+			progress( 2 );
 			var previousBase = state.base;
 			state.base = data.hash || state.base;
 			state.order.forEach( function ( id ) {
@@ -1014,18 +1010,20 @@
 			} );
 			state.history = [];
 			clearPending();
-			setTimeout( function () {
+			return checkLive( data.hash ).then( function ( confirmed ) {
+				var seconds = Math.max( 1, Math.round( ( performance.now() - startedAt ) / 1000 ) );
 				state.busy = false;
 				renderDock();
 				var extra = data.draft_updated ? ' Copied into the waiting Studio draft too.' : '';
-				toast( 'Live. ' + plural( edits.length, 'change', 'changes' ) + ' published.' + extra, {
-					tone: 'good',
+				toast( ( confirmed ? 'Live in ' + plural( seconds, 'second', 'seconds' ) + '. Cache cleared.' : 'Published. The public page can take a minute to catch up while caches clear.' ) + extra, {
+					tone: confirmed ? 'good' : '',
 					ms: 12000,
-					action: previousBase ? { label: 'Undo publish', run: function () {
+					link: { label: 'View page', href: liveUrl() },
+					action: previousBase ? { label: 'Undo', run: function () {
 						undoPublish( data.revision );
 					} } : null
 				} );
-			}, reduceMotion ? 300 : 1100 );
+			} );
 		} ).catch( function ( error ) {
 			clearTimeout( stepTimer );
 			state.busy = false;
@@ -1041,6 +1039,44 @@
 				toast( 'Not published: ' + error.message, { ms: 15000 } );
 			}
 		} );
+	}
+
+	/** The page's public address, without Live Edit's own parameters. */
+	function liveUrl() {
+		var url = new URL( window.location.href );
+		url.searchParams.delete( 'deft_edit' );
+		url.hash = '';
+		return url.toString();
+	}
+
+	/**
+	 * Loads the page the way a visitor would (no login cookie) and looks for the version just published in its
+	 * deft-page meta tag. Tries a few times, since a CDN can take a moment. Resolves true or false, never fails.
+	 */
+	function checkLive( hash ) {
+		if ( ! hash ) {
+			return Promise.resolve( false );
+		}
+		var want = hash.slice( 0, 12 );
+		var waits = [ 0, 1200, 2500, 4000 ];
+		function attempt( i ) {
+			return new Promise( function ( resolve ) {
+				setTimeout( resolve, waits[ i ] );
+			} ).then( function () {
+				return fetch( liveUrl(), { credentials: 'omit', cache: 'no-store' } );
+			} ).then( function ( response ) {
+				return response.text();
+			} ).then( function ( html ) {
+				var found = /<meta name="deft-page" content="([0-9a-f]{12})"/.exec( html );
+				if ( found && found[ 1 ] === want ) {
+					return true;
+				}
+				return i + 1 < waits.length ? attempt( i + 1 ) : false;
+			} ).catch( function () {
+				return i + 1 < waits.length ? attempt( i + 1 ) : false;
+			} );
+		}
+		return attempt( 0 );
 	}
 
 	/** Puts back the version before the one just published. */
