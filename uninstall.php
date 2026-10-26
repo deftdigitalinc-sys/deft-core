@@ -33,6 +33,9 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_agent_log" ); // phpcs:i
 delete_option( 'deft_agent_tokens' );
 delete_option( 'deft_agent_db' );
 delete_option( 'deft_watch_mail' );
+foreach ( array( 'deft_sec_scan', 'deft_sec_baseline', 'deft_sec_baseline_at', 'deft_sec_applied', 'deft_sec_apply_result', 'deft_sec_lockouts', 'deft_sec_root_error' ) as $deft_option ) {
+	delete_option( $deft_option );
+}
 delete_option( 'deft_migrate_removal' );
 delete_transient( 'deft_migrate_hack_signs' );
 $deft_backup_key = get_option( 'deft_agent_backup_key' );

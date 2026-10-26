@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
 const DEFT_WATCH_SPAM = '/\b(casino|baccarat|roulette|blackjack|poker|slots?\s*(online|gacor|machine)|gacor|togel|judi|sportsbook|betting|bet365|viagra|cialis|levitra|payday\s+loans?|escort|porn|xxx|onlyfans|replica\s+(watch|bag)|essay\s+writ|crypto\s+casino|no\s+deposit\s+bonus)\b/i';
 
 /** Findings that mean the site was hacked. They are fixed by the clean-up, so Central never lets them be muted. */
-const DEFT_WATCH_HACK = array( 'spam_posts', 'uploads_php', 'open_registration' );
+const DEFT_WATCH_HACK = array( 'spam_posts', 'uploads_php', 'open_registration', 'user_ini_prepend', 'spam_sitemap', 'core_modified', 'unknown_mu_plugin', 'hidden_admin', 'suspicious_user_meta', 'ioc_username', 'hidden_plugin', 'root_php' );
 
 /** A short plain title for each finding, as the Site watch board shows it. */
 const DEFT_WATCH_TITLES = array(
@@ -33,6 +33,25 @@ const DEFT_WATCH_TITLES = array(
 	'noindex'           => 'Hidden from search engines',
 	'mail_failed'       => 'An email from the site failed',
 	'cron_late'         => 'Scheduled jobs are late',
+	// From the file check (modules/security.php).
+	'user_ini_prepend'     => 'A file runs before every page',
+	'spam_sitemap'         => 'Spam sitemaps in the web root',
+	'core_modified'        => 'WordPress files were changed',
+	'unknown_mu_plugin'    => 'Unknown must-use plugin',
+	'hidden_admin'         => 'Hidden administrator',
+	'suspicious_user_meta' => 'Malware marks on user records',
+	'ioc_username'         => 'Malware username',
+	'hidden_plugin'        => 'Hidden plugin',
+	'root_php'             => 'Unknown PHP in the web root',
+	'plugin_modified'      => 'Plugin files were changed',
+	'root_archive'         => 'Backup files anyone can download',
+	'files_changed'        => 'Code files changed',
+	'dropin_unknown'       => 'Unknown drop-in',
+	'app_passwords'        => 'Application passwords exist',
+	'bad_plugin'           => 'Plugin Deft doesn\'t run',
+	'admin_no_2fa'         => 'Administrator without two-factor',
+	'security_off'         => 'Protections switched off',
+	'integrity_pending'    => 'File check not finished',
 );
 
 add_filter( 'deft_core_defaults', 'deft_watch_defaults' );
@@ -256,6 +275,14 @@ function deft_watch_report() {
 		)
 	);
 
+	// The file check's findings (it runs nightly; the report reads its last result).
+	$security = function_exists( 'deft_sec_report' ) ? deft_sec_report() : null;
+	if ( $security ) {
+		foreach ( $security['findings'] as $f ) {
+			$add( $f['level'], $f['code'], $f['text'] );
+		}
+	}
+
 	$order = array( 'bad' => 0, 'warn' => 1, 'info' => 2 );
 	usort( $findings, function ( $a, $b ) use ( $order ) {
 		return $order[ $a['level'] ] <=> $order[ $b['level'] ];
@@ -304,6 +331,7 @@ function deft_watch_report() {
 			'disabled' => defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON,
 			'late'     => $late,
 		),
+		'security' => $security ? $security['security'] : null,
 	);
 }
 

@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name:       Deft Core
- * Description:       Deft Digital's own site tools. Forms: the Contact page's short form is saved under Leads and emailed through WP Mail, with an auto-reply and spam checks. Central sync (off until set up) sends each lead to Deft Central. Visitor statistics (off until switched on): cookieless visits, sources, approximate location, taps, form sends and time per section, with a Site report dashboard and a monthly email. Google Analytics (off until switched on, needs Site Kit): a monthly Sync puts Google Analytics and Search Console totals in the Site report next to Deft Core's own, including the months before Deft Core started counting. Site basics: old addresses redirect to their new pages, and missing pages show the Deft 404 design. Deft pages: pages stored as plain HTML on a Deft template, with drafts, preview links, 30 days of history, and publishing from Deft Studio (off until switched on). Live Edit (off until switched on): Deft staff change words, images and links right on the page. Move off Elementor: lifts HTML-widget pages out of Elementor one at a time, with a side-by-side compare and a way back. Site watch: a signed, read-only health report for Deft Central's daily check. Coming soon and maintenance mode: one switch shows visitors a Deft-styled holding page while staff see the real site. Link previews: a title, description and picture when a page is shared, so no separate Open Graph plugin is needed (quiet while an SEO plugin adds its own). Client reports: Deft Central reads each month's totals (signed, read-only) to draft the client's monthly report. AI agent access (off until switched on): an MCP server for Claude, Codex, Gemini and Antigravity, with a token per agent and a log of every action.
- * Version:           0.9.5
+ * Description:       Deft Digital's own site tools. Forms: the Contact page's short form is saved under Leads and emailed through WP Mail, with an auto-reply and spam checks. Central sync (off until set up) sends each lead to Deft Central. Visitor statistics (off until switched on): cookieless visits, sources, approximate location, taps, form sends and time per section, with a Site report dashboard and a monthly email. Google Analytics (off until switched on, needs Site Kit): a monthly Sync puts Google Analytics and Search Console totals in the Site report next to Deft Core's own, including the months before Deft Core started counting. Site basics: old addresses redirect to their new pages, and missing pages show the Deft 404 design. Deft pages: pages stored as plain HTML on a Deft template, with drafts, preview links, 30 days of history, and publishing from Deft Studio (off until switched on). Live Edit (off until switched on): Deft staff change words, images and links right on the page. Move off Elementor: lifts HTML-widget pages out of Elementor one at a time, with a side-by-side compare and a way back. Site watch: a signed, read-only health report for Deft Central's daily check. Site security: the file editor off, no PHP in uploads, no backups or archives from the web, XML-RPC and application passwords off, a login lockout, and a nightly file check against WordPress's official checksums with email alerts. Coming soon and maintenance mode: one switch shows visitors a Deft-styled holding page while staff see the real site. Link previews: a title, description and picture when a page is shared, so no separate Open Graph plugin is needed (quiet while an SEO plugin adds its own). Client reports: Deft Central reads each month's totals (signed, read-only) to draft the client's monthly report. AI agent access (off until switched on): an MCP server for Claude, Codex, Gemini and Antigravity, with a token per agent and a log of every action.
+ * Version:           0.10.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Deft Digital
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'DEFT_CORE_VERSION', '0.9.5' );
+define( 'DEFT_CORE_VERSION', '0.10.0' );
 define( 'DEFT_CORE_FILE', __FILE__ );
 define( 'DEFT_CORE_DIR', plugin_dir_path( __FILE__ ) );
 
@@ -33,6 +33,7 @@ require_once DEFT_CORE_DIR . 'modules/live-edit.php';
 require_once DEFT_CORE_DIR . 'modules/migrate.php';
 require_once DEFT_CORE_DIR . 'modules/pages-admin.php';
 require_once DEFT_CORE_DIR . 'modules/watch.php';
+require_once DEFT_CORE_DIR . 'modules/security.php';
 require_once DEFT_CORE_DIR . 'modules/stats.php';
 require_once DEFT_CORE_DIR . 'modules/social.php';
 require_once DEFT_CORE_DIR . 'modules/soon.php';
@@ -55,4 +56,5 @@ function deft_core_deactivate() {
 	wp_clear_scheduled_hook( 'deft_forms_cleanup' );
 	wp_clear_scheduled_hook( 'deft_central_sweep' );
 	wp_clear_scheduled_hook( 'deft_track_daily' );
+	deft_sec_deactivate();
 }
