@@ -565,6 +565,7 @@ function deft_sec_check_root( $core_sums, $add ) {
 	$arch   = array();
 	$ini    = array();
 	$wf_waf = '';
+	$google = array();
 
 	// auto_prepend_file loads a file before every page. Wordfence's firewall uses it legitimately (wordfence-waf.php);
 	// the "SC" mesh uses it to come back after a clean-up.
@@ -636,6 +637,18 @@ function deft_sec_check_root( $core_sums, $add ) {
 			if ( $size > 50000 || preg_match( DEFT_WATCH_SPAM, $head ) || false !== strpos( $head, '?p=' ) ) {
 				$maps[] = sprintf( '%s (%s)', $name, size_format( $size ) );
 			}
+		} elseif ( 'update-log.txt' === $lower ) {
+			// The attacker's upload log is base64; a plain-text update-log.txt is benign (seen on clean sites).
+			if ( preg_match( '/[A-Za-z0-9+\/=]{200,}/', (string) file_get_contents( $path, false, null, 0, 65536 ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				$php[] = 'update-log.txt (encoded upload log)';
+			}
+		} elseif ( 'robots.txt' === $lower ) {
+			$robots = (string) file_get_contents( $path, false, null, 0, 65536 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			if ( preg_match( '/feed=xmlsitemap|sitemap\d{2,}/i', $robots ) || preg_match_all( '/^\s*sitemap:/mi', $robots ) > 5 ) {
+				$maps[] = 'robots.txt (lists spam sitemaps)';
+			}
+		} elseif ( preg_match( '/^google[0-9a-f]{8,}\.html$/i', $name ) && ! deft_sec_allowed( $name ) ) {
+			$google[] = $name;
 		} elseif ( preg_match( '/\.(zip|tar|tgz|gz|rar|7z|sql|wpress|bak|bk|old)$/i', $lower ) || preg_match( '/^\.htaccess\.|^wp-config\.php\./i', $lower ) ) {
 			if ( ! deft_sec_allowed( $name ) ) {
 				$arch[] = sprintf( '%s (%s)', $name, size_format( (int) filesize( $path ) ) );
@@ -651,7 +664,10 @@ function deft_sec_check_root( $core_sums, $add ) {
 	if ( $arch ) {
 		$add( 'bad', 'root_archive', sprintf( 'Archives or backups in the web root anyone may download: %s. They can hold the database password.', implode( ', ', array_slice( $arch, 0, 6 ) ) ) );
 	}
-	return array( 'php' => $php, 'sitemaps' => $maps, 'archives' => $arch, 'prepend' => $ini, 'wordfence_waf' => $wf_waf );
+	// The root .htaccess should still carry WordPress's own block; injected versions often replace it.
+	$htaccess = is_readable( $root . '.htaccess' ) ? (string) file_get_contents( $root . '.htaccess' ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+	$wp_block = '' === (string) get_option( 'permalink_structure' ) || false !== strpos( $htaccess, '# BEGIN WordPress' );
+	return array( 'php' => $php, 'sitemaps' => $maps, 'archives' => $arch, 'prepend' => $ini, 'wordfence_waf' => $wf_waf, 'google' => $google, 'wp_block' => $wp_block );
 }
 
 /** Must-use plugins and drop-ins load on every page and don't show in the plugin list, so malware loves them. */
@@ -746,6 +762,9 @@ function deft_sec_check_plugins( &$state, &$baseline, $add, $deadline ) {
 		if ( deft_sec_walk( WP_PLUGIN_DIR . '/' . $name, 5, true ) && ! deft_sec_allowed( 'wp-content/plugins/' . $name . '/' ) ) {
 			$ghost[] = $name;
 		}
+	}
+	if ( is_dir( WP_PLUGIN_DIR . '/tmp' ) && ! in_array( 'tmp', $ghost, true ) ) {
+		$ghost[] = 'tmp (an unzip folder the 2026 toolkit leaves, often with unzipsuccess)';
 	}
 	if ( $ghost ) {
 		$add( 'bad', 'hidden_plugin', sprintf( 'Folders in plugins with PHP but no plugin WordPress can see: %s.', implode( ', ', array_slice( $ghost, 0, 8 ) ) ) );
@@ -912,6 +931,13 @@ function deft_sec_check_users( $add ) {
 	if ( $bad ) {
 		$add( 'bad', 'suspicious_user_meta', sprintf( '%d user records carry keys 2026 malware leaves behind (%s).', $bad, implode( ', ', DEFT_SEC_BAD_META ) ) );
 	}
+	// Posts written straight into the database: a blank edit date, or an author who doesn't exist (the October 2026
+	// toolkit inserted batches of these on 24+ sites, sharing fake author IDs).
+	$injected = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p LEFT JOIN {$wpdb->users} u ON u.ID = p.post_author WHERE p.post_status = 'publish' AND p.post_type NOT IN ('revision', 'nav_menu_item', 'deft_lead') AND ( p.post_modified = '0000-00-00 00:00:00' OR ( p.post_author <> 0 AND u.ID IS NULL ) )" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$out['injected_posts'] = $injected;
+	if ( $injected ) {
+		$add( 'bad', 'injected_posts', sprintf( '%d published posts or pages were written straight into the database (no real author, or a blank edit date). Injected spam looks like this.', $injected ) );
+	}
 	$logins = (array) $wpdb->get_col( "SELECT user_login FROM {$wpdb->users}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$out['bad_logins'] = array_values( preg_grep( DEFT_SEC_BAD_LOGIN, $logins ) );
 	if ( $out['bad_logins'] ) {
@@ -975,6 +1001,12 @@ function deft_sec_run_scan() {
 	}
 	$changed = array_merge( $changed, deft_sec_baseline_compare( $baseline, 'mu', deft_sec_walk( WPMU_PLUGIN_DIR, 500 ) ) );
 	$changed = array_merge( $changed, deft_sec_baseline_compare( $baseline, 'root', deft_sec_root_code_files() ) );
+	foreach ( $root['google'] as $rel ) {
+		$changed[] = $rel . ' (Search Console verification file: check who owns it)';
+	}
+	if ( ! $root['wp_block'] ) {
+		$changed[] = '.htaccess (WordPress\'s own block is missing)';
+	}
 	foreach ( $loose as $rel ) {
 		$changed[] = $rel . ' (loose in wp-content)';
 	}

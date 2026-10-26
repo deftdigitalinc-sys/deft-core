@@ -127,6 +127,9 @@ put( 'backup.zip', 'PK' );
 put( '.htaccess.bk', '#' );
 put( 'casino-online/header.php', '<?php // PclZip' );
 put( 'old-site/readme.txt', 'no php here' );
+put( 'update-log.txt', str_repeat( 'QUJD', 80 ) );
+put( 'robots.txt', "User-agent: *\nSitemap: https://x.com/?feed=xmlsitemap02\n" );
+put( 'google1234abcd5678ef90.html', 'google-site-verification' );
 put( '.user.ini', "auto_prepend_file = /home/u1/public_html/wp-content/c1b12371.php\n" );
 
 $findings = array();
@@ -139,7 +142,10 @@ check( 'root: core files and wp-config.php not flagged', ! array_intersect( arra
 check( 'root: Hostinger default.php (16369 B) not flagged', ! in_array( 'default.php', $r['php'], true ) );
 check( 'root: attacker folder with PHP flagged', (bool) preg_grep( '/^casino-online\//', $r['php'] ) );
 check( 'root: folder without PHP not flagged', ! preg_grep( '/^old-site\//', $r['php'] ) );
-check( 'root: spam sitemap flagged, plain sitemap.xml not', 1 === count( $r['sitemaps'] ) && 0 === strpos( $r['sitemaps'][0], 'sitemap16.xml' ) );
+check( 'root: spam sitemap flagged, plain sitemap.xml not', (bool) preg_grep( '/^sitemap16\.xml/', $r['sitemaps'] ) && ! preg_grep( '/^sitemap\.xml/', $r['sitemaps'] ) );
+check( 'root: base64 update-log.txt flagged', in_array( 'update-log.txt (encoded upload log)', $r['php'], true ) );
+check( 'root: robots.txt listing spam feeds flagged', in_array( 'robots.txt (lists spam sitemaps)', $r['sitemaps'], true ) );
+check( 'root: unknown Google verification file listed', array( 'google1234abcd5678ef90.html' ) === $r['google'] );
 check( 'root: backup.zip and .htaccess.bk flagged', 2 === count( $r['archives'] ) );
 check( 'root: .user.ini auto_prepend_file flagged', in_array( 'user_ini_prepend', codes( $findings ), true ) );
 check( 'root: all four findings', ! array_diff( array( 'root_php', 'spam_sitemap', 'root_archive', 'user_ini_prepend' ), codes( $findings ) ) );
