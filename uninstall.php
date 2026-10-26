@@ -20,9 +20,10 @@ if ( ! empty( $deft_settings['delete_on_uninstall'] ) ) {
 		wp_delete_post( $deft_lead, true );
 	}
 	global $wpdb;
-	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_hits, {$wpdb->prefix}deft_reports, {$wpdb->prefix}deft_ga" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_hits, {$wpdb->prefix}deft_reports, {$wpdb->prefix}deft_ga, {$wpdb->prefix}deft_page_revisions" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	delete_option( 'deft_ga_bridge' );
 	delete_option( 'deft_ga_db' );
+	delete_option( 'deft_pages_db' );
 }
 
 // Agent access: tokens and the log always go, so a removed plugin leaves no way in. Backups of changed files stay
@@ -31,6 +32,9 @@ global $wpdb;
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_agent_log" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 delete_option( 'deft_agent_tokens' );
 delete_option( 'deft_agent_db' );
+delete_option( 'deft_watch_mail' );
+delete_option( 'deft_migrate_removal' );
+delete_transient( 'deft_migrate_hack_signs' );
 $deft_backup_key = get_option( 'deft_agent_backup_key' );
 if ( $deft_backup_key && ! empty( $deft_settings['delete_on_uninstall'] ) ) {
 	$deft_uploads    = wp_upload_dir( null, false );

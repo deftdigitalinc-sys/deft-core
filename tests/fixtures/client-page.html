@@ -1,0 +1,42 @@
+<style>
+.gx{--ink:#0d1b2a;--sea:#1f6f8b;--sand:#f4efe6;font-family:Georgia,serif;color:var(--ink);background:var(--sand)}
+.gx *{box-sizing:border-box}
+.gx-nav{display:flex;justify-content:space-between;align-items:center;padding:22px 6vw;font:600 15px/1 system-ui,sans-serif}
+.gx-nav a{color:var(--ink);text-decoration:none;margin-left:22px}
+.gx-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:5vw;align-items:center;padding:4vw 6vw 7vw}
+.gx-eyebrow{font:700 12px/1 system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--sea)}
+.gx h1{font-size:clamp(40px,6vw,82px);line-height:.98;margin:18px 0 22px;letter-spacing:-.02em}
+.gx-lead{font-size:20px;line-height:1.5;max-width:36ch;margin:0 0 30px}
+.gx-btn{display:inline-block;background:var(--ink);color:#fff;padding:16px 26px;border-radius:999px;font:600 16px/1 system-ui,sans-serif;text-decoration:none}
+.gx-btn.alt{background:transparent;color:var(--ink);border:2px solid var(--ink);margin-left:10px}
+.gx-hero img{width:100%;border-radius:28px;display:block;aspect-ratio:4/3;object-fit:cover}
+.gx-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:0 6vw 8vw}
+.gx-card{background:#fff;border-radius:22px;overflow:hidden}
+.gx-card img{width:100%;aspect-ratio:3/2;object-fit:cover;display:block}
+.gx-card div{padding:20px 22px 26px}
+.gx-card h3{margin:0 0 8px;font-size:24px}
+.gx-card p{margin:0;font:16px/1.5 system-ui,sans-serif;color:#3a4a5a}
+.gx-call{background:var(--ink);color:#fff;text-align:center;padding:7vw 6vw}
+.gx-call h2{color:#fff;font-size:clamp(30px,4vw,52px);margin:0 0 14px}
+.gx-call p{font:18px/1.5 system-ui,sans-serif;opacity:.8;margin:0 0 26px}
+.gx-call .gx-btn{background:#fff;color:var(--ink)}
+@media(max-width:760px){.gx-hero,.gx-cards{grid-template-columns:1fr}}
+</style>
+<div class="gx">
+<nav class="gx-nav"><a href="/" style="margin:0"><strong>Galaxy Glass</strong></a><span><a href="#services">Services</a><a href="#work">Our work</a><a href="tel:5615550100">(561) 555-0100</a></span></nav>
+<section class="gx-hero">
+ <div>
+  <span class="gx-eyebrow">Palm Beach County · Since 2009</span>
+  <h1>Frameless showers, <em>made to measure</em>.</h1>
+  <p class="gx-lead">Custom glass shower doors, mirrors and closets, measured, cut and installed by our own team in about two weeks.</p>
+  <a class="gx-btn" href="/contact/">Get a free quote</a><a class="gx-btn alt" href="#work">See our work</a>
+ </div>
+ <img src="/wp-content/uploads/test/shower.jpg" alt="Frameless shower in a white bathroom" width="1600" height="1100">
+</section>
+<section class="gx-cards" id="services">
+ <article class="gx-card"><img src="/wp-content/uploads/test/shower.jpg" alt="Shower door"><div><h3>Shower doors</h3><p>Frameless, semi-frameless and sliding, in clear, low-iron or frosted glass.</p></div></article>
+ <article class="gx-card"><img src="/wp-content/uploads/test/mirror.jpg" alt="Mirror wall"><div><h3>Mirrors</h3><p>Vanity mirrors and full gym walls, cut to size with polished edges.</p></div></article>
+ <article class="gx-card"><img src="/wp-content/uploads/test/closet.jpg" alt="Closet"><div><h3>Closets</h3><p>Walk-in closets with glass doors and soft-close drawers.</p></div></article>
+</section>
+<section class="gx-call"><h2>Ready for a new bathroom?</h2><p>Send a photo and rough measurements and we'll quote within one business day.</p><a class="gx-btn" href="/contact/">Start my quote</a></section>
+</div>

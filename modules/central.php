@@ -36,6 +36,37 @@ function deft_central_ready() {
 	return deft_core_setting( 'central_enabled' ) && deft_central_configured();
 }
 
+/* ---------- Requests from Central ---------- */
+
+/**
+ * Checks a request Deft Central signed with this site's secret, the same way Central checks ours:
+ * X-Deft-Timestamp (within 5 minutes) and X-Deft-Signature: v1=HMAC-SHA256(secret, "<timestamp>.<METHOD>.<route>.<body>").
+ * The method and route are signed too, so a signature for one call can't be replayed against another, and each
+ * signature is accepted once.
+ */
+function deft_central_verify_request( WP_REST_Request $request ) {
+	$secret = deft_central_secret();
+	if ( strlen( $secret ) < 32 || ! deft_core_setting( 'central_site_id' ) ) {
+		return new WP_Error( 'deft_unsigned', __( 'This site has no Deft Central secret yet.', 'deft-core' ), array( 'status' => 401 ) );
+	}
+	$timestamp = (string) $request->get_header( 'X-Deft-Timestamp' );
+	$signature = (string) $request->get_header( 'X-Deft-Signature' );
+	if ( ! ctype_digit( $timestamp ) || abs( time() - (int) $timestamp ) > 300 || 0 !== strpos( $signature, 'v1=' ) ) {
+		return new WP_Error( 'deft_unsigned', __( 'Missing or expired signature.', 'deft-core' ), array( 'status' => 401 ) );
+	}
+	$signed   = $timestamp . '.' . strtoupper( $request->get_method() ) . '.' . $request->get_route() . '.' . $request->get_body();
+	$expected = 'v1=' . hash_hmac( 'sha256', $signed, $secret );
+	if ( ! hash_equals( $expected, $signature ) ) {
+		return new WP_Error( 'deft_bad_signature', __( 'The signature does not match this site\'s Deft Central secret.', 'deft-core' ), array( 'status' => 401 ) );
+	}
+	$seen = 'deft_sig_' . substr( sha1( $signature ), 0, 32 );
+	if ( get_transient( $seen ) ) {
+		return new WP_Error( 'deft_replayed', __( 'That signed request was already used.', 'deft-core' ), array( 'status' => 401 ) );
+	}
+	set_transient( $seen, 1, 600 );
+	return true;
+}
+
 /* ---------- Queue ---------- */
 
 add_action( 'deft_forms_lead_saved', 'deft_central_queue_new_lead' );
