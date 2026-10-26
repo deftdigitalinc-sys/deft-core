@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.8.0
+Stable tag: 0.8.1
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,13 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.8.1 =
+* Move off Elementor checks each converted page by itself: the live page and the draft are loaded at phone, tablet and desktop widths and compared (height, words, images, links, where headings sit). Pages that match go to a new Checked lane; pages that differ list the differences and can still "Go live anyway".
+* The last step removes Elementor safely: with a backup confirmed and staff's OK, Elementor is deactivated, every page is loaded as a visitor would, and Elementor is only uninstalled if they all pass. If one fails, Elementor goes straight back on.
+* Hacked sites are locked as "Cleaning first" (a new Site watch setting, or automatically while spam posts or PHP files in uploads are found), so nothing infected is copied into a Deft page.
+* The health report gives each finding a plain title and marks hack findings, which Deft Central never lets be muted.
+* Deft pages and their previews now always win over a page builder's own template.
 
 = 0.8.0 =
 * Deft pages: pages stored as plain HTML on a Deft template (with or without the theme header and footer), with drafts, one-hour preview links, 30 days of history and restore. Going live clears the page cache and tells Deft Central, which clears Hostinger's cache and CDN.

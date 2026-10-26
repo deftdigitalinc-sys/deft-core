@@ -16,14 +16,37 @@ defined( 'ABSPATH' ) || exit;
 /** Words spam injections use in titles and addresses. Kept narrow ("slot" alone would match "time slot"). */
 const DEFT_WATCH_SPAM = '/\b(casino|baccarat|roulette|blackjack|poker|slots?\s*(online|gacor|machine)|gacor|togel|judi|sportsbook|betting|bet365|viagra|cialis|levitra|payday\s+loans?|escort|porn|xxx|onlyfans|replica\s+(watch|bag)|essay\s+writ|crypto\s+casino|no\s+deposit\s+bonus)\b/i';
 
+/** Findings that mean the site was hacked. They are fixed by the clean-up, so Central never lets them be muted. */
+const DEFT_WATCH_HACK = array( 'spam_posts', 'uploads_php', 'open_registration' );
+
+/** A short plain title for each finding, as the Site watch board shows it. */
+const DEFT_WATCH_TITLES = array(
+	'core_update'       => 'WordPress update waiting',
+	'php_old'           => 'PHP is out of date',
+	'plugin_updates'    => 'Plugin updates waiting',
+	'new_admin'         => 'New administrator',
+	'open_registration' => 'Anyone can sign up as staff',
+	'spam_posts'        => 'Spam pages are published',
+	'orphan_posts'      => 'Posts with no author',
+	'uploads_php'       => 'PHP file in uploads',
+	'url_mismatch'      => 'Site addresses don\'t match',
+	'noindex'           => 'Hidden from search engines',
+	'mail_failed'       => 'An email from the site failed',
+	'cron_late'         => 'Scheduled jobs are late',
+);
+
 add_filter( 'deft_core_defaults', 'deft_watch_defaults' );
 function deft_watch_defaults( $defaults ) {
-	return $defaults + array( 'watch' => 1 );
+	return $defaults + array( 'watch' => 1, 'cleaning' => 0 );
 }
 
 add_filter( 'deft_core_sanitize', 'deft_watch_sanitize', 10, 2 );
 function deft_watch_sanitize( $out, $input ) {
-	$out['watch'] = empty( $input['watch'] ) ? 0 : 1;
+	$out['watch']    = empty( $input['watch'] ) ? 0 : 1;
+	$out['cleaning'] = empty( $input['cleaning'] ) ? 0 : 1;
+	if ( (int) deft_core_setting( 'cleaning' ) !== $out['cleaning'] ) {
+		delete_transient( 'deft_migrate_hack_signs' );
+	}
 	return $out;
 }
 
@@ -38,6 +61,9 @@ function deft_watch_settings_fields( $s ) {
 			<?php if ( deft_pages_is_staff() ) : ?>
 				<a href="<?php echo esc_url( wp_nonce_url( rest_url( 'deft/v1/health' ), 'wp_rest', '_wpnonce' ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'See the report', 'deft-core' ); ?></a>
 			<?php endif; ?></p></td></tr>
+		<tr><th scope="row"><?php esc_html_e( 'Being cleaned', 'deft-core' ); ?></th>
+			<td><label><input type="checkbox" name="deft_core[cleaning]" value="1" <?php checked( $s['cleaning'] ); ?>> <?php esc_html_e( 'This site was hacked and is being cleaned', 'deft-core' ); ?></label>
+			<p class="description"><?php esc_html_e( 'Locks the move off Elementor ("Cleaning first") so nothing infected is copied into a Deft page. It also locks by itself while the site watch finds spam posts or PHP files in uploads. Untick it once the clean-up is checked.', 'deft-core' ); ?></p></td></tr>
 	</table>
 	<?php
 }
@@ -92,7 +118,7 @@ function deft_watch_report() {
 	global $wp_version;
 	$findings = array();
 	$add      = function ( $level, $code, $text ) use ( &$findings ) {
-		$findings[] = array( 'level' => $level, 'code' => $code, 'text' => $text );
+		$findings[] = array( 'level' => $level, 'code' => $code, 'title' => DEFT_WATCH_TITLES[ $code ] ?? '', 'text' => $text, 'hack' => in_array( $code, DEFT_WATCH_HACK, true ) );
 	};
 
 	// Versions and updates waiting.
@@ -241,6 +267,8 @@ function deft_watch_report() {
 		'at'       => gmdate( 'c' ),
 		'status'   => $findings ? $findings[0]['level'] : 'good',
 		'findings' => $findings,
+		'hacked'   => (bool) array_filter( wp_list_pluck( $findings, 'hack' ) ),
+		'cleaning' => (bool) deft_core_setting( 'cleaning' ),
 		'versions' => array(
 			'wordpress'      => $wp_version,
 			'wordpress_next' => $core_next,

@@ -1,6 +1,7 @@
 /**
  * The Deft pages screen: list, one page (draft, HTML, history), a new page, and the Move off Elementor board, with a
- * side-by-side compare. Plain DOM on top of the deft/v1 REST routes; window.deftPages comes from pages-admin.php.
+ * side-by-side compare, the automatic check after Convert, and the last step that removes Elementor. Plain DOM on top
+ * of the deft/v1 REST routes; window.deftPages comes from pages-admin.php.
  */
 ( function () {
 	'use strict';
@@ -398,14 +399,17 @@
 
 	var COLUMNS = [
 		{ key: 'elementor', title: 'On Elementor', hint: 'HTML widgets only. Ready to lift out.' },
-		{ key: 'converted', title: 'Converted', hint: 'A Deft draft is waiting. Compare, then go live.' },
+		{ key: 'converted', title: 'Converted', hint: 'A Deft draft is waiting. It is checked against the live page next.' },
+		{ key: 'checked', title: 'Checked', hint: 'Matches the live page at phone, tablet and desktop.' },
 		{ key: 'live', title: 'Live as Deft page', hint: 'Elementor no longer draws these.' },
 		{ key: 'attention', title: 'Needs Studio', hint: 'Uses other Elementor widgets.' }
 	];
 
-	function viewMigrate( board ) {
+	var checking = {};
+
+	function viewMigrate( board, fresh ) {
 		var main = chrome( 'migrate', [ h( 'p', { class: 'dp-loading', text: 'Reading the Elementor pages…' } ) ] );
-		( board ? Promise.resolve( board ) : api( '/migration' ) ).then( function ( data ) {
+		( board ? Promise.resolve( board ) : api( '/migration' + ( fresh ? '?fresh=1' : '' ) ) ).then( function ( data ) {
 			main.textContent = '';
 			var total = data.pages.length;
 			var done = data.count.live;
@@ -413,67 +417,92 @@
 				h( 'div', {}, [ h( 'h2', { text: 'Move off Elementor' } ), h( 'p', { class: 'dp-meta', text: total ? done + ' of ' + total + ' pages moved' : 'No Elementor pages on this site.' } ) ] ),
 				h( 'div', { class: 'dp-progress', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': total, 'aria-valuenow': done }, [ h( 'span', { style: 'width:' + ( total ? Math.round( 100 * done / total ) : 0 ) + '%' } ) ] )
 			] ) );
-			main.appendChild( finishLine( data ) );
-			var lanes = h( 'div', { class: 'dp-board' } );
+			if ( data.cleaning ) {
+				main.appendChild( h( 'div', { class: 'dp-lock', role: 'status' }, [
+					h( 'p', { class: 'dp-eyebrow', text: 'Cleaning first' } ),
+					h( 'p', { text: 'This site was hacked. It moves off Elementor after it\'s clean and checked, so nothing infected gets copied into a Deft page.' } ),
+					h( 'p', { class: 'dp-meta', text: data.cleaning } ),
+					h( 'div', { class: 'dp-row' }, [
+						h( 'button', { class: 'dp-btn small', type: 'button', text: 'Check again', onclick: function () {
+							viewMigrate( null, true );
+						} } ),
+						h( 'a', { class: 'dp-btn small ghost', href: cfg.settings + '#deft-watch', text: 'Site watch settings' } )
+					] )
+				] ) );
+			}
+			var lanes = h( 'div', { class: 'dp-board' + ( data.cleaning ? ' locked' : '' ) } );
 			COLUMNS.forEach( function ( col ) {
 				var pages = data.pages.filter( function ( p ) {
 					return p.status === col.key;
 				} );
 				lanes.appendChild( h( 'section', { class: 'dp-lane lane-' + col.key }, [
 					h( 'header', {}, [ h( 'h3', {}, [ col.title, h( 'span', { class: 'dp-count', text: String( pages.length ) } ) ] ), h( 'p', { class: 'dp-meta', text: col.hint } ) ] ),
-					h( 'div', { class: 'dp-lane-body' }, pages.length ? pages.map( migrateCard ) : [ h( 'p', { class: 'dp-lane-empty', text: 'Nothing here.' } ) ] )
+					h( 'div', { class: 'dp-lane-body' }, pages.length ? pages.map( function ( page ) {
+						return migrateCard( page, data );
+					} ) : [ h( 'p', { class: 'dp-lane-empty', text: 'Nothing here.' } ) ] )
 				] ) );
 			} );
 			main.appendChild( lanes );
+			main.appendChild( removalPanel( data ) );
+			// A page converted but never checked (say, the check was closed half way) gets checked now.
+			if ( ! data.cleaning ) {
+				data.pages.filter( function ( p ) {
+					return 'converted' === p.status && ! p.check && ! checking[ p.id ];
+				} ).slice( 0, 1 ).forEach( runCheck );
+			}
 		} ).catch( fail( main ) );
 	}
 
-	function finishLine( data ) {
-		var e = data.elementor;
-		if ( e.removable ) {
-			return h( 'div', { class: 'dp-finish ready' }, [ h( 'b', { text: 'Every page is off Elementor.' } ), ' Take a backup, then deactivate Elementor' + ( e.pro ? ' and Elementor Pro' : '' ) + ' and check the site. Uninstall once it looks right.' ] );
-		}
-		var parts = [];
-		if ( data.blockers.length ) {
-			parts.push( h( 'p', {}, [ h( 'b', { text: 'Also still using Elementor: ' } ), data.blockers.join( '; ' ) + '.' ] ) );
-		}
-		if ( ! e.active ) {
-			parts.push( h( 'p', { text: 'Elementor isn\'t active on this site. Pages still read their saved Elementor layout, so converting works the same.' } ) );
-		}
-		return parts.length ? h( 'div', { class: 'dp-finish' }, parts ) : h( 'span' );
-	}
-
-	function migrateCard( page ) {
+	function migrateCard( page, data ) {
+		var locked = !! data.cleaning;
 		var actions = h( 'div', { class: 'dp-row' } );
-		function act( label, path, done ) {
-			return h( 'button', { class: 'dp-btn small' + ( 'Go live' === label || 'Convert' === label ? ' primary' : ' ghost' ), type: 'button', text: label, onclick: function ( e ) {
+		function act( label, path, done, primary, tiny ) {
+			return h( 'button', { class: 'dp-btn ' + ( tiny ? 'tiny' : 'small' ) + ( primary ? ' primary' : ' ghost' ), type: 'button', text: label, disabled: locked && 'back' !== path, onclick: function ( e ) {
 				var release = busy( e.target, label + '…' );
 				api( '/migration/' + page.id + '/' + path, { method: 'POST' } ).then( function ( r ) {
 					notice( done, 'good' );
-					if ( r.warnings && r.warnings.length ) {
-						notice( done + ' ' + r.warnings[ 0 ], 'warn' );
-					}
 					viewMigrate( r.board );
+					if ( 'convert' === path ) {
+						var converted = r.board.pages.filter( function ( p ) {
+							return p.id === page.id;
+						} )[ 0 ];
+						if ( converted ) {
+							runCheck( converted );
+						}
+					}
 				} ).catch( function ( err ) {
 					release();
 					notice( err.message, 'bad' );
 				} );
 			} } );
 		}
+		var isChecking = !! checking[ page.id ];
+		var compareButton = h( 'button', { class: 'dp-btn small ghost', type: 'button', text: 'Compare', onclick: function () {
+			compare( page.title, page.url, page.preview, 'publish' === page.wpstatus );
+		} } );
+		var checkNote = null;
 		if ( 'elementor' === page.status ) {
-			actions.appendChild( act( 'Convert', 'convert', '"' + page.title + '" converted. Compare it with the live page.' ) );
-		} else if ( 'converted' === page.status ) {
-			actions.appendChild( h( 'button', { class: 'dp-btn small', type: 'button', text: 'Compare', onclick: function () {
-				compare( page.title, page.url, page.preview, 'publish' === page.wpstatus );
-			} } ) );
-			actions.appendChild( act( 'Go live', 'live', '"' + page.title + '" is live as a Deft page.' ) );
-			actions.appendChild( act( 'Undo', 'back', 'Draft thrown away.' ) );
+			actions.appendChild( act( 'Convert', 'convert', '"' + page.title + '" converted. Checking it against the live page…', true ) );
+		} else if ( 'converted' === page.status || 'checked' === page.status ) {
+			actions.appendChild( compareButton );
+			if ( 'checked' === page.status ) {
+				actions.appendChild( act( 'Go live', 'live', '"' + page.title + '" is live as a Deft page.', true ) );
+			} else if ( page.check ) {
+				actions.appendChild( act( 'Go live anyway', 'live', '"' + page.title + '" is live as a Deft page. Keep an eye on the differences.', false ) );
+			}
+			if ( ! isChecking && ! locked ) {
+				actions.appendChild( h( 'button', { class: 'dp-btn tiny ghost', type: 'button', text: page.check ? 'Check again' : 'Check', onclick: function () {
+					runCheck( page );
+				} } ) );
+			}
+			actions.appendChild( act( 'Undo', 'back', 'Draft thrown away.', false, true ) );
+			checkNote = checkSummary( page, isChecking );
 		} else if ( 'live' === page.status ) {
 			actions.appendChild( link( 'Open', { post: page.id }, 'dp-btn small ghost' ) );
-			actions.appendChild( act( 'Back to Elementor', 'back', '"' + page.title + '" is back on Elementor.' ) );
+			actions.appendChild( act( 'Back to Elementor', 'back', '"' + page.title + '" is back on Elementor.', false ) );
 		}
 		var other = Object.keys( page.other || {} );
-		return h( 'article', { class: 'dp-mcard' }, [
+		return h( 'article', { class: 'dp-mcard' + ( isChecking ? ' is-checking' : '' ), 'data-page': page.id }, [
 			h( 'div', { class: 'dp-card-top' }, [ h( 'h4', { text: page.title || '(no title)' } ), page.front ? h( 'span', { class: 'dp-badge', text: 'Home' } ) : null ] ),
 			h( 'p', { class: 'dp-url', text: page.url.replace( /^https?:\/\//, '' ) } ),
 			h( 'p', { class: 'dp-meta' }, [
@@ -489,8 +518,401 @@
 			} ).map( function ( w ) {
 				return h( 'p', { class: 'dp-note', text: w } );
 			} )[ 0 ] || null,
+			checkNote,
 			actions
 		] );
+	}
+
+	function checkSummary( page, isChecking ) {
+		if ( isChecking ) {
+			return h( 'p', { class: 'dp-check run', role: 'status' }, [ h( 'span', { class: 'dp-spin', 'aria-hidden': 'true' } ), checking[ page.id ] ] );
+		}
+		if ( ! page.check ) {
+			return h( 'p', { class: 'dp-check', text: 'Not checked yet.' } );
+		}
+		if ( page.check.ok ) {
+			return h( 'p', { class: 'dp-check good', text: 'Matches the live page at phone, tablet and desktop.' } );
+		}
+		// The same difference at every width is listed once.
+		var where = {}, order = [];
+		[ [ 'phone', 'Phone' ], [ 'tablet', 'Tablet' ], [ 'desktop', 'Desktop' ] ].forEach( function ( size ) {
+			( page.check.sizes[ size[ 0 ] ] || [] ).forEach( function ( issue ) {
+				if ( ! where[ issue ] ) {
+					where[ issue ] = [];
+					order.push( issue );
+				}
+				where[ issue ].push( size[ 1 ] );
+			} );
+		} );
+		var lines = order.map( function ( issue ) {
+			var sizes = 3 === where[ issue ].length ? 'All sizes' : where[ issue ].join( ', ' );
+			return h( 'li', {}, [ h( 'b', { text: sizes + ': ' } ), issue ] );
+		} );
+		return h( 'div', { class: 'dp-check warn' }, [ h( 'p', { text: 'Differs from the live page. Compare, fix the draft, or go live anyway.' } ), h( 'ul', {}, lines.slice( 0, 5 ) ) ] );
+	}
+
+	/* ---------- The check: live page and draft, rendered and compared at three widths ---------- */
+
+	var SIZES = [ [ 'phone', 390, 'phone' ], [ 'tablet', 820, 'tablet' ], [ 'desktop', 1440, 'desktop' ] ];
+
+	function runCheck( page ) {
+		if ( checking[ page.id ] || ! page.preview ) {
+			return;
+		}
+		checking[ page.id ] = 'Checking at phone, tablet and desktop…';
+		redrawCard( page );
+		var liveUrl = 'publish' === page.wpstatus ? page.url : page.url + ( page.url.indexOf( '?' ) > -1 ? '&' : '?' ) + 'preview=true';
+		var sizes = {};
+		var chain = Promise.resolve();
+		SIZES.forEach( function ( size ) {
+			chain = chain.then( function () {
+				checking[ page.id ] = 'Checking at ' + size[ 2 ] + ' width…';
+				redrawCard( page );
+				return Promise.all( [ render( liveUrl, size[ 1 ] ), render( page.preview, size[ 1 ] ) ] ).then( function ( pair ) {
+					sizes[ size[ 0 ] ] = differences( pair[ 0 ], pair[ 1 ] );
+				} );
+			} );
+		} );
+		chain.then( function () {
+			return api( '/migration/' + page.id + '/check', { method: 'POST', body: { sizes: sizes } } );
+		} ).then( function ( r ) {
+			delete checking[ page.id ];
+			notice( r.ok ? '"' + page.title + '" matches the live page. Ready to go live.' : '"' + page.title + '" differs from the live page. Have a look before it goes live.', r.ok ? 'good' : 'warn' );
+			if ( onMigrate() ) {
+				viewMigrate( r.board );
+			}
+		} ).catch( function ( err ) {
+			delete checking[ page.id ];
+			notice( 'The check didn\'t finish: ' + err.message, 'bad' );
+			if ( onMigrate() ) {
+				viewMigrate();
+			}
+		} );
+	}
+
+	function onMigrate() {
+		return 'migrate' === new URL( window.location.href ).searchParams.get( 'view' );
+	}
+
+	function redrawCard( page ) {
+		var card = document.querySelector( '.dp-mcard[data-page="' + page.id + '"]' );
+		if ( ! card ) {
+			return;
+		}
+		card.classList.add( 'is-checking' );
+		var note = card.querySelector( '.dp-check' );
+		var fresh = checkSummary( page, true );
+		if ( note ) {
+			note.replaceWith( fresh );
+		} else {
+			card.insertBefore( fresh, card.querySelector( '.dp-row:last-child' ) );
+		}
+		card.querySelectorAll( '.dp-row:last-child button' ).forEach( function ( b ) {
+			if ( 'Compare' !== b.textContent ) {
+				b.disabled = true;
+			}
+		} );
+	}
+
+	/** Loads a page off screen at a width, lets lazy images and fonts settle, and measures what a visitor sees. */
+	function render( url, width ) {
+		return new Promise( function ( resolve, reject ) {
+			var holder = document.querySelector( '.dp-check-stage' ) || document.body.appendChild( h( 'div', { class: 'dp-check-stage', 'aria-hidden': 'true' } ) );
+			var frame = h( 'iframe', { tabindex: '-1', title: 'Check', style: 'width:' + width + 'px;height:900px' } );
+			var timer = setTimeout( function () {
+				frame.remove();
+				reject( new Error( 'a page took over 30 seconds to load' ) );
+			}, 30000 );
+			frame.addEventListener( 'load', function () {
+				var win = frame.contentWindow, doc = frame.contentDocument;
+				if ( ! doc || ! doc.body ) {
+					clearTimeout( timer );
+					frame.remove();
+					reject( new Error( 'a page could not be read' ) );
+					return;
+				}
+				// Full height, so lazy images below the fold load and the page lays out as it would when scrolled.
+				var settle = function () {
+					frame.style.height = Math.min( 30000, Math.max( 900, doc.documentElement.scrollHeight ) ) + 'px';
+					return new Promise( function ( r ) {
+						setTimeout( r, 900 );
+					} );
+				};
+				( doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve() ).then( settle ).then( settle ).then( function () {
+					clearTimeout( timer );
+					var result = measure( win, doc );
+					frame.remove();
+					resolve( result );
+				} ).catch( function ( err ) {
+					clearTimeout( timer );
+					frame.remove();
+					reject( err );
+				} );
+			} );
+			frame.src = url + ( url.indexOf( '?' ) > -1 ? '&' : '?' ) + 'deft_frame=1&deft_check=' + Date.now();
+			holder.appendChild( frame );
+		} );
+	}
+
+	function measure( win, doc ) {
+		var scrollY = win.scrollY || 0;
+		function shown( el ) {
+			var box = el.getBoundingClientRect();
+			var style = win.getComputedStyle( el );
+			return box.width > 1 && box.height > 1 && 'hidden' !== style.visibility && '0' !== style.opacity;
+		}
+		function file( src ) {
+			try {
+				var path = new URL( src, doc.baseURI ).pathname;
+				// The same image at another size (photo-300x200.jpg) counts as the same image.
+				return decodeURIComponent( path.split( '/' ).pop() ).replace( /-\d+x\d+(?=\.\w+$)/, '' ).replace( /-scaled(?=\.\w+$)/, '' );
+			} catch ( e ) {
+				return src;
+			}
+		}
+		function href( value ) {
+			try {
+				var u = new URL( value, doc.baseURI );
+				u.searchParams.delete( 'deft_frame' );
+				u.searchParams.delete( 'deft_check' );
+				return u.origin === win.location.origin ? u.pathname.replace( /\/$/, '' ) + u.search + u.hash || '/' : u.href;
+			} catch ( e ) {
+				return value;
+			}
+		}
+		var images = [].slice.call( doc.querySelectorAll( 'img' ) ).filter( shown ).map( function ( img ) {
+			var box = img.getBoundingClientRect();
+			return { file: file( img.currentSrc || img.src ), w: Math.round( box.width ), top: Math.round( box.top + scrollY ), loaded: img.complete && img.naturalWidth > 0 };
+		} );
+		var heads = [].slice.call( doc.querySelectorAll( 'h1, h2, h3' ) ).filter( shown ).map( function ( el ) {
+			return { text: el.textContent.replace( /\s+/g, ' ' ).trim().slice( 0, 60 ), top: Math.round( el.getBoundingClientRect().top + scrollY ) };
+		} );
+		var links = [].slice.call( doc.querySelectorAll( 'a[href]' ) ).filter( function ( a ) {
+			return shown( a ) && ! /^(javascript:|#$)/.test( a.getAttribute( 'href' ) );
+		} ).map( function ( a ) {
+			return href( a.getAttribute( 'href' ) );
+		} );
+		return {
+			height: doc.documentElement.scrollHeight,
+			words: ( doc.body.innerText || '' ).toLowerCase().replace( /[^\p{L}\p{N}@.'’-]+/gu, ' ' ).split( ' ' ).filter( Boolean ),
+			images: images,
+			heads: heads,
+			links: links
+		};
+	}
+
+	/** What changed between the live page (a) and the draft (b), as short sentences. */
+	function differences( a, b ) {
+		var out = [];
+		var dh = b.height - a.height;
+		if ( Math.abs( dh ) > Math.max( 60, a.height * 0.04 ) ) {
+			out.push( 'The draft is ' + Math.abs( dh ) + ' px ' + ( dh > 0 ? 'taller' : 'shorter' ) + ' (' + a.height + ' px live).' );
+		}
+		var missing = minus( a.words, b.words ), extra = minus( b.words, a.words );
+		var limit = Math.max( 3, Math.round( a.words.length * 0.01 ) );
+		if ( missing.length > limit ) {
+			out.push( missing.length + ' words on the live page aren\'t in the draft, like "' + missing.slice( 0, 6 ).join( ' ' ) + '".' );
+		}
+		if ( extra.length > limit ) {
+			out.push( 'The draft has ' + extra.length + ' words the live page doesn\'t, like "' + extra.slice( 0, 6 ).join( ' ' ) + '".' );
+		}
+		var bFiles = b.images.map( function ( i ) {
+			return i.file;
+		} );
+		var aFiles = a.images.map( function ( i ) {
+			return i.file;
+		} );
+		minus( aFiles, bFiles ).slice( 0, 3 ).forEach( function ( name ) {
+			out.push( 'Image ' + name + ' is missing from the draft.' );
+		} );
+		minus( bFiles, aFiles ).slice( 0, 2 ).forEach( function ( name ) {
+			out.push( 'The draft shows an extra image, ' + name + '.' );
+		} );
+		// Same image, same place in the page: the second photo.jpg on the live page against the second one in the draft.
+		var resized = 0, seen = {};
+		a.images.forEach( function ( img ) {
+			var nth = seen[ img.file ] = ( seen[ img.file ] || 0 ) + 1;
+			var match = b.images.filter( function ( i ) {
+				return i.file === img.file;
+			} )[ nth - 1 ];
+			if ( match && img.loaded && match.loaded && Math.abs( match.w - img.w ) > Math.max( 24, img.w * 0.15 ) && resized < 2 ) {
+				resized++;
+				out.push( 'Image ' + img.file + ' shows ' + match.w + ' px wide instead of ' + img.w + ' px.' );
+			}
+		} );
+		minus( unique( a.links ), unique( b.links ) ).slice( 0, 3 ).forEach( function ( url ) {
+			out.push( 'The link to ' + url + ' is missing.' );
+		} );
+		var moved = 0;
+		a.heads.forEach( function ( head ) {
+			var match = b.heads.filter( function ( x ) {
+				return x.text === head.text;
+			} )[ 0 ];
+			if ( match && Math.abs( match.top - head.top ) > Math.max( 80, a.height * 0.06 ) && moved < 2 ) {
+				moved++;
+				out.push( 'The heading "' + head.text + '" sits ' + Math.abs( match.top - head.top ) + ' px ' + ( match.top > head.top ? 'lower' : 'higher' ) + '.' );
+			}
+		} );
+		return out.slice( 0, 8 );
+	}
+
+	/** Items of a that b doesn't have, counting repeats. */
+	function minus( a, b ) {
+		var counts = {};
+		b.forEach( function ( x ) {
+			counts[ x ] = ( counts[ x ] || 0 ) + 1;
+		} );
+		return a.filter( function ( x ) {
+			if ( counts[ x ] ) {
+				counts[ x ]--;
+				return false;
+			}
+			return true;
+		} );
+	}
+
+	function unique( list ) {
+		return list.filter( function ( x, i ) {
+			return list.indexOf( x ) === i;
+		} );
+	}
+
+	/* ---------- Last step: removing Elementor ---------- */
+
+	var REMOVE_STEPS = [
+		[ 'backup', 'Backup taken' ],
+		[ 'deactivate', 'Deactivate Elementor' ],
+		[ 'check', 'Check every page' ],
+		[ 'uninstall', 'Uninstall Elementor' ]
+	];
+
+	function removalPanel( data ) {
+		var e = data.elementor;
+		var state = e.removal;
+		var count = data.count;
+		var total = data.pages.length;
+		var names = ( e.installed || [] ).join( ' and ' ) || 'Elementor';
+		var panel = h( 'section', { class: 'dp-remove', 'aria-labelledby': 'dp-remove-title' } );
+		panel.appendChild( h( 'h3', { id: 'dp-remove-title', class: 'dp-eyebrow', text: 'Last step · remove Elementor' } ) );
+
+		if ( state && 'removed' === state.step ) {
+			panel.appendChild( h( 'p', { class: 'dp-check good', text: names === 'Elementor' ? 'Elementor removed ' + ago( state.removed ) + '. Every page was checked and loading fine.' : 'Removed ' + ago( state.removed ) + '. Every page was checked and loading fine.' } ) );
+			panel.appendChild( h( 'p', { class: 'dp-meta', text: 'Elementor\'s saved layouts are still in the database, so a page can go back to Elementor if Elementor is installed again.' } ) );
+			return panel;
+		}
+		if ( ! ( e.installed || [] ).length ) {
+			panel.appendChild( h( 'p', { class: 'dp-meta', text: 'Elementor isn\'t installed on this site.' } ) );
+			return panel;
+		}
+
+		var checks = [
+			[ count.live === total && total > 0, 'Every page live as a Deft page (' + count.live + ' of ' + total + ')' ],
+			[ ! data.blockers.length, data.blockers.length ? 'Still using Elementor: ' + data.blockers.join( '; ' ) : 'Nothing else uses Elementor (headers, footers, other posts)' ],
+			[ ! data.cleaning, data.cleaning ? 'The site is being cleaned first' : 'No signs of a hack' ]
+		];
+		panel.appendChild( h( 'ul', { class: 'dp-checklist' }, checks.map( function ( c ) {
+			return h( 'li', { class: c[ 0 ] ? 'ok' : '' }, [ h( 'span', { class: 'dp-tick', 'aria-hidden': 'true' } ), c[ 1 ] ] );
+		} ) ) );
+
+		if ( state && 'failed' === state.step ) {
+			var failed = ( state.pages || [] ).filter( function ( p ) {
+				return ! p.ok;
+			} );
+			panel.appendChild( h( 'div', { class: 'dp-check warn' }, [
+				h( 'p', { text: 'The check failed, so ' + names + ' went straight back on. Nothing was uninstalled.' } ),
+				h( 'ul', {}, failed.slice( 0, 6 ).map( function ( p ) {
+					return h( 'li', {}, [ h( 'b', { text: p.title + ': ' } ), p.problem ] );
+				} ) )
+			] ) );
+		}
+
+		if ( state && ( 'deactivated' === state.step || 'checked' === state.step ) ) {
+			// Stopped half way (the tab was closed): offer to carry on or put Elementor back.
+			panel.appendChild( h( 'p', { class: 'dp-warn', text: names + ' is deactivated but not uninstalled yet.' } ) );
+			var resume = h( 'div', { class: 'dp-row' }, [
+				h( 'button', { class: 'dp-btn small primary', type: 'button', text: 'Check every page and finish', onclick: function () {
+					runRemoval( panel, data, 'check' );
+				} } ),
+				h( 'button', { class: 'dp-btn small ghost', type: 'button', text: 'Put Elementor back on', onclick: function ( ev ) {
+					var release = busy( ev.target, 'Putting it back…' );
+					api( '/migration/remove', { method: 'POST', body: { step: 'restore' } } ).then( function ( r ) {
+						notice( names + ' is back on.', 'good' );
+						viewMigrate( r.board );
+					} ).catch( function ( err ) {
+						release();
+						notice( err.message, 'bad' );
+					} );
+				} } )
+			] );
+			panel.appendChild( resume );
+			return panel;
+		}
+
+		if ( ! e.removable ) {
+			panel.appendChild( h( 'p', { class: 'dp-meta', text: 'Unlocks when every page is live as a Deft page and nothing else on the site uses Elementor.' } ) );
+			return panel;
+		}
+		if ( ! e.can ) {
+			panel.appendChild( h( 'p', { class: 'dp-meta', text: 'Only an administrator who can manage plugins can remove Elementor.' } ) );
+			return panel;
+		}
+
+		var backup = h( 'input', { type: 'checkbox', id: 'dp-backup' } );
+		var ok = h( 'input', { type: 'checkbox', id: 'dp-ok' } );
+		var go = h( 'button', { class: 'dp-btn primary', type: 'button', text: 'Remove ' + names, disabled: true } );
+		function update() {
+			go.disabled = ! ( backup.checked && ok.checked );
+		}
+		backup.addEventListener( 'change', update );
+		ok.addEventListener( 'change', update );
+		go.addEventListener( 'click', function () {
+			runRemoval( panel, data, 'deactivate' );
+		} );
+		panel.appendChild( h( 'div', { class: 'dp-consent' }, [
+			h( 'label', { for: 'dp-backup' }, [ backup, h( 'span', {}, [ 'I took a backup of the whole site today ', h( 'a', { href: 'https://hpanel.hostinger.com/', target: '_blank', rel: 'noopener', text: '(hPanel › Websites › Backups)' } ) ] ) ] ),
+			h( 'label', { for: 'dp-ok' }, [ ok, h( 'span', { text: 'OK to remove ' + names + ' from ' + cfg.site } ) ] )
+		] ) );
+		panel.appendChild( h( 'div', { class: 'dp-row' }, [ go, h( 'span', { class: 'dp-meta', text: 'If any page fails the check, Elementor goes straight back on.' } ) ] ) );
+		return panel;
+	}
+
+	/** Runs the removal steps in order, showing each one, from deactivate (fresh start) or check (resuming). */
+	function runRemoval( panel, data, from ) {
+		var order = [ 'deactivate', 'check', 'uninstall' ];
+		var list = h( 'ol', { class: 'dp-steps', role: 'status' } );
+		var items = {};
+		REMOVE_STEPS.forEach( function ( step ) {
+			items[ step[ 0 ] ] = h( 'li', { class: 'backup' === step[ 0 ] ? 'done' : '' }, [ h( 'span', { class: 'dp-tick', 'aria-hidden': 'true' } ), step[ 1 ] ] );
+			list.appendChild( items[ step[ 0 ] ] );
+		} );
+		panel.textContent = '';
+		panel.appendChild( h( 'h3', { class: 'dp-eyebrow', text: 'Removing Elementor' } ) );
+		panel.appendChild( list );
+		var steps = order.slice( order.indexOf( from ) );
+		order.slice( 0, order.indexOf( from ) ).forEach( function ( done ) {
+			items[ done ].className = 'done';
+		} );
+		var chain = Promise.resolve();
+		steps.forEach( function ( step ) {
+			chain = chain.then( function ( last ) {
+				if ( last && last.removal && 'failed' === last.removal.step ) {
+					return last;
+				}
+				items[ step ].className = 'now';
+				return api( '/migration/remove', { method: 'POST', body: { step: step, backup: true, ok: true } } ).then( function ( r ) {
+					items[ step ].className = r.removal && 'failed' === r.removal.step ? 'bad' : 'done';
+					return r;
+				} );
+			} );
+		} );
+		chain.then( function ( r ) {
+			var failedCheck = r.removal && 'failed' === r.removal.step;
+			notice( failedCheck ? 'A page failed the check, so Elementor is back on. Nothing was uninstalled.' : 'Elementor removed. Every page checked and loading fine.', failedCheck ? 'bad' : 'good' );
+			viewMigrate( r.board );
+		} ).catch( function ( err ) {
+			notice( err.message, 'bad' );
+			viewMigrate();
+		} );
 	}
 
 	/* ---------- Compare: live page and draft, one over the other ---------- */

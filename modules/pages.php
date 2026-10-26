@@ -423,7 +423,9 @@ function deft_pages_register_templates( $templates ) {
 	return array_merge( $templates, deft_pages_templates() );
 }
 
-add_filter( 'template_include', 'deft_pages_template', 99 );
+// Late, so a page builder that also claims the page (Elementor draws its canvas pages at 11) never wins over a Deft page
+// or the preview of its draft.
+add_filter( 'template_include', 'deft_pages_template', 9999 );
 function deft_pages_template( $template ) {
 	if ( deft_pages_showing() ) {
 		return DEFT_CORE_DIR . 'templates/deft-page.php';
