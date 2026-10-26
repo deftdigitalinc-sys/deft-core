@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.2
+Stable tag: 0.9.3
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -19,6 +19,12 @@ Central sync (off by default): Settings > Deft > Deft Central. Each lead is sent
 Deft Central's deftCoreIngest function by WP-Cron, with retries; the Leads list shows Sent / Waiting / Failed.
 Contract: docs/deft-core-connector.md in Deft Central.
 
+Link previews (on by default): Settings > Deft > Link previews. Open Graph and Twitter card tags (title, short
+description, picture) so shared links look right on Facebook, WhatsApp, iMessage, LinkedIn and X. Replaces the Open
+Graph plugin (its tags and Jetpack's are switched off). Left alone while an SEO plugin such as Yoast or Rank Math is
+active. Picture: featured image, else the first Media Library image on the page, else the Share image setting, else
+the site icon.
+
 Visitor statistics (off by default): Settings > Deft > Visitor statistics. Cookieless visits, sources, approximate
 city/county, taps on call/WhatsApp/email/directions, form starts and sends, and time per section, with a Site report
 screen and a monthly email. Details: dist/wp/TRACKING.md.
@@ -28,6 +34,9 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.3 =
+* Link previews: Deft Core writes the Open Graph and Twitter card tags itself, so the Open Graph plugin can be deactivated. Title, short description, picture, page address and site name for every page and post, with a Share image setting for pages without a photo. Stays out of the way when Yoast, Rank Math or another SEO plugin writes these tags.
 
 = 0.9.2 =
 * Live Edit: Desktop and Phone switch. Phone shows the page 390 px wide with your unsaved changes in it; click any outlined part to go back and edit it.
