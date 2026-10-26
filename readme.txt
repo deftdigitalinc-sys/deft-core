@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.2
+Stable tag: 0.9.3
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,10 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.3 =
+* Link previews: every page gets Open Graph and X card tags, so a shared link shows its title, a short description and a picture on Facebook, WhatsApp, iMessage, LinkedIn and X. The separate Open Graph plugin is no longer needed. The picture is the featured image, else the first picture on the page, else a fallback set in Settings > Deft > Link previews, else the site icon.
+* Stays quiet while Yoast, Rank Math, The SEO Framework, All in One SEO, SEOPress or the Open Graph plugin is active, and on a Deft page whose own head already has the tags. On by default; Settings > Deft turns it off.
 
 = 0.9.2 =
 * Live Edit: Desktop and Phone switch. Phone shows the page 390 px wide with your unsaved changes in it; click any outlined part to go back and edit it.
