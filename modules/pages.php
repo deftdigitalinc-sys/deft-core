@@ -425,10 +425,22 @@ function deft_pages_register_templates( $templates ) {
 
 add_filter( 'template_include', 'deft_pages_template', 99 );
 function deft_pages_template( $template ) {
-	if ( is_singular( 'page' ) && deft_pages_is( get_queried_object_id() ) ) {
+	if ( deft_pages_showing() ) {
 		return DEFT_CORE_DIR . 'templates/deft-page.php';
 	}
 	return $template;
+}
+
+/**
+ * Whether the page being viewed is shown with the Deft template: a Deft page, or an Elementor page whose converted
+ * draft is being previewed before it moves over.
+ */
+function deft_pages_showing() {
+	if ( ! is_singular( 'page' ) ) {
+		return false;
+	}
+	$post_id = get_queried_object_id();
+	return deft_pages_is( $post_id ) || ( deft_pages_previewing( $post_id ) && get_post_meta( $post_id, '_deft_page_draft', true ) );
 }
 
 /** The markup to show for the page being viewed: the draft when previewing, otherwise live. */
@@ -446,7 +458,7 @@ function deft_pages_current( $post_id ) {
 
 add_action( 'wp_head', 'deft_pages_head', 1 );
 function deft_pages_head() {
-	if ( ! is_singular( 'page' ) || ! deft_pages_is( get_queried_object_id() ) ) {
+	if ( ! deft_pages_showing() ) {
 		return;
 	}
 	$current = deft_pages_current( get_queried_object_id() );
@@ -456,7 +468,7 @@ function deft_pages_head() {
 
 add_filter( 'body_class', 'deft_pages_body_class' );
 function deft_pages_body_class( $classes ) {
-	if ( is_singular( 'page' ) && deft_pages_is( get_queried_object_id() ) ) {
+	if ( deft_pages_showing() ) {
 		$classes[] = 'deft-page';
 		$classes[] = 'deft-page-' . sanitize_html_class( get_page_template_slug( get_queried_object_id() ) );
 	}
@@ -496,7 +508,7 @@ function deft_pages_preview_unpublished( $posts, $query ) {
 		return $posts;
 	}
 	$post = $posts[0];
-	if ( 'page' === $post->post_type && 'publish' !== $post->post_status && deft_pages_is( $post ) && deft_pages_previewing( $post->ID ) ) {
+	if ( 'page' === $post->post_type && 'publish' !== $post->post_status && deft_pages_previewing( $post->ID ) && get_post_meta( $post->ID, '_deft_page_draft', true ) ) {
 		$post->post_status = 'publish'; // Only for this request's copy; nothing is saved.
 		nocache_headers();
 	}

@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
 
 $deft_post_id = get_queried_object_id();
 $deft_current = deft_pages_current( $deft_post_id );
-$deft_framed  = 'deft-theme' === get_page_template_slug( $deft_post_id );
+$deft_framed  = 'deft-theme' === ( deft_pages_is( $deft_post_id ) ? get_page_template_slug( $deft_post_id ) : (string) get_post_meta( $deft_post_id, '_deft_page_template_next', true ) );
 
 if ( $deft_framed && ! wp_is_block_theme() ) {
 	get_header();

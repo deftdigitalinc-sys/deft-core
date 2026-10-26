@@ -42,7 +42,7 @@ function deft_live_enabled() {
 /** Whether the current visitor gets Live Edit on the page being viewed. */
 function deft_live_available() {
 	return deft_live_enabled() && is_singular( 'page' ) && deft_pages_is( get_queried_object_id() ) && deft_pages_is_staff()
-		&& ! deft_pages_previewing( get_queried_object_id() ) && ! is_customize_preview();
+		&& ! deft_pages_previewing( get_queried_object_id() ) && ! is_customize_preview() && ! isset( $_GET['deft_frame'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 }
 
 add_action( 'wp_enqueue_scripts', 'deft_live_enqueue' );

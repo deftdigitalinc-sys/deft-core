@@ -30,6 +30,8 @@ require_once DEFT_CORE_DIR . 'modules/ga-history.php';
 require_once DEFT_CORE_DIR . 'modules/site.php';
 require_once DEFT_CORE_DIR . 'modules/pages.php';
 require_once DEFT_CORE_DIR . 'modules/live-edit.php';
+require_once DEFT_CORE_DIR . 'modules/migrate.php';
+require_once DEFT_CORE_DIR . 'modules/pages-admin.php';
 require_once DEFT_CORE_DIR . 'modules/agent.php';
 
 register_activation_hook( __FILE__, 'deft_core_activate' );
