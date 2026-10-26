@@ -3,6 +3,9 @@
  * switched on (modules/live-edit.php). The page's own markup is never sent back: only the text inside marked
  * elements ([data-deft-edit]), an image's address and alt text, or a link's address.
  *
+ * Phone shows the page at 390 px wide with the unsaved changes in it. "Ask" sends one block of plain words to Claude
+ * (through Deft Core and Central) and shows its version next to the current one; nothing changes until Use this.
+ *
  * Everything we draw lives in a shadow root, so the client's CSS can't reach our controls and ours can't reach theirs.
  * The only styles added to the page itself are the hover and focus outlines on editable elements.
  */
@@ -35,6 +38,9 @@
 		base: cfg.base,
 		busy: false,
 		panel: null,     // 'review' | 'history' | null
+		view: 'desktop', // 'desktop' | 'phone'
+		asking: null,    // the ask Claude is answering, so a late answer for another element is dropped
+		photo: null,     // id of the image the Replace photo button sits on
 		confirmExit: false
 	};
 
@@ -80,7 +86,9 @@
 			image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5a1.5 1.5 0 100-.01',
 			arrow: 'M5 12h14M13 6l6 6-6 6',
 			eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 100-6 3 3 0 000 6z',
-			restore: 'M4 12a8 8 0 108-8 8 8 0 00-6.3 3M4 4v4h4'
+			restore: 'M4 12a8 8 0 108-8 8 8 0 00-6.3 3M4 4v4h4',
+			desktop: 'M3 5h18v11H3zM8 20h8M12 16v4',
+			phone: 'M8 3h8a1 1 0 011 1v16a1 1 0 01-1 1H8a1 1 0 01-1-1V4a1 1 0 011-1zM11 18h2'
 		};
 		var svg = document.createElementNS( 'http://www.w3.org/2000/svg', 'svg' );
 		svg.setAttribute( 'viewBox', '0 0 24 24' );
@@ -305,6 +313,9 @@
 		if ( 'review' === state.panel ) {
 			renderPanel();
 		}
+		if ( 'phone' === state.view ) {
+			syncPhone();
+		}
 		savePending();
 	}
 
@@ -374,7 +385,14 @@
 		ui.dock = h( 'div', { class: 'dock', role: 'region', 'aria-label': 'Deft Live Edit' } );
 		ui.panel = h( 'aside', { class: 'panel', 'aria-label': 'Live Edit panel' } );
 		ui.scrim = h( 'div', { class: 'scrim', onclick: closePanel } );
-		[ ui.live, ui.chip, ui.toolbar, ui.popover, ui.scrim, ui.panel, ui.toasts, ui.dock ].forEach( function ( el ) {
+		ui.ask = h( 'div', { class: 'ask', role: 'group', 'aria-label': 'Ask Claude for a version' } );
+		ui.photo = h( 'button', { class: 'photo-btn', onclick: function () {
+			if ( state.photo && state.items[ state.photo ] ) {
+				pickImage( state.items[ state.photo ] );
+			}
+		} }, [ icon( 'image' ), 'Replace photo' ] );
+		ui.phone = h( 'div', { class: 'phone', role: 'dialog', 'aria-label': 'This page on a phone' } );
+		[ ui.live, ui.phone, ui.chip, ui.photo, ui.toolbar, ui.ask, ui.popover, ui.scrim, ui.panel, ui.toasts, ui.dock ].forEach( function ( el ) {
 			root.appendChild( el );
 		} );
 		if ( reduceMotion ) {
@@ -435,6 +453,7 @@
 
 		if ( ! state.on ) {
 			dock.appendChild( h( 'button', { class: 'btn ghost', onclick: start, 'aria-keyshortcuts': 'E' }, [ icon( 'edit' ), 'Edit page', h( 'kbd', { text: 'E' } ) ] ) );
+			dock.appendChild( viewSwitch() );
 			if ( cfg.draft ) {
 				dock.appendChild( h( 'span', { class: 'pill-note', title: 'Saved by ' + cfg.draft.by + ' ' + ago( cfg.draft.saved ) + '. Your Live Edit changes are copied into it.' }, [ 'Studio draft waiting' ] ) );
 			}
@@ -462,6 +481,7 @@
 		}
 
 		dock.appendChild( h( 'span', { class: 'label' }, [ h( 'span', { class: 'eyebrow', text: 'Live Edit' } ), h( 'b', { text: cfg.title } ), h( 'span', { class: 'hide-sm muted', text: ' · Deft staff only' } ) ] ) );
+		dock.appendChild( viewSwitch() );
 		dock.appendChild( h( 'span', { class: 'count' + ( count ? ' has' : '' ), 'aria-live': 'polite' }, [ count ? plural( count, 'change', 'changes' ) : 'No changes', count ? h( 'span', { class: 'hide-sm', text: ', not live yet' } ) : null ] ) );
 		dock.appendChild( h( 'span', { class: 'sep' } ) );
 		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Undo last change', title: 'Undo last change', disabled: ! count, onclick: undoLast }, [ icon( 'undo' ) ] ) );
@@ -474,6 +494,14 @@
 		dock.appendChild( h( 'button', { class: 'icon-btn', 'aria-label': 'Stop editing', title: 'Stop editing (Esc)', onclick: function () {
 			stop();
 		} }, [ icon( 'close' ) ] ) );
+	}
+
+	function viewSwitch() {
+		return h( 'span', { class: 'seg', role: 'group', 'aria-label': 'Preview size' }, [ [ 'desktop', 'Desktop' ], [ 'phone', 'Phone' ] ].map( function ( v ) {
+			return h( 'button', { class: 'seg-btn', 'aria-pressed': state.view === v[ 0 ] ? 'true' : 'false', title: v[ 1 ], onclick: function () {
+				setView( v[ 0 ] );
+			} }, [ icon( v[ 0 ] ), h( 'span', { class: 'hide-sm', text: v[ 1 ] } ) ] );
+		} ) );
 	}
 
 	function undoLast() {
@@ -533,6 +561,7 @@
 		deactivate();
 		closePopover();
 		closePanel();
+		hidePhoto();
 		state.on = false;
 		document.documentElement.classList.remove( 'deft-le-on' );
 		state.order.forEach( function ( id ) {
@@ -555,6 +584,7 @@
 		refreshItem( item );
 		item.el.focus( { preventScroll: true } );
 		placeToolbar( item );
+		showAsk( item );
 		hideChip();
 	}
 
@@ -575,6 +605,7 @@
 			touch( item );
 		}
 		ui.toolbar.classList.remove( 'show' );
+		hideAsk();
 	}
 
 	function exec( command, value ) {
@@ -635,6 +666,119 @@
 		}, !! anchor );
 	}
 
+	/* ---------- Ask Claude for a version ---------- */
+
+	var ASKS = [ 'Make it shorter', 'In their voice', 'Add the city' ];
+
+	function keepFocus( e ) {
+		e.preventDefault(); // Keep the cursor in the text.
+	}
+
+	/** Plain words only: Claude's version replaces the element's text, so anything holding links or other tags is left alone. */
+	function canAsk( item ) {
+		return !! cfg.ask && 'text' === item.kind && 'a' !== item.tag && ! item.el.querySelector( '*:not(br)' ) && '' !== textOf( item.el.innerHTML );
+	}
+
+	function hideAsk() {
+		state.asking = null;
+		ui.ask.classList.remove( 'show' );
+		ui.ask.textContent = '';
+	}
+
+	function showAsk( item ) {
+		var box = ui.ask;
+		state.asking = null;
+		box.textContent = '';
+		if ( ! canAsk( item ) ) {
+			box.classList.remove( 'show' );
+			return;
+		}
+		var input = h( 'input', { type: 'text', placeholder: 'Or say what to change', 'aria-label': 'What should Claude change?', maxlength: 300 } );
+		function askOwn() {
+			if ( input.value.trim() ) {
+				askClaude( item, input.value.trim() );
+			}
+		}
+		input.addEventListener( 'keydown', function ( e ) {
+			if ( 'Enter' === e.key ) {
+				e.preventDefault();
+				askOwn();
+			}
+		} );
+		box.appendChild( h( 'span', { class: 'tb-label', text: 'Type in place, or ask' } ) );
+		ASKS.forEach( function ( ask ) {
+			box.appendChild( h( 'button', { class: 'ask-chip', onmousedown: keepFocus, onclick: function () {
+				askClaude( item, ask );
+			} }, [ ask ] ) );
+		} );
+		box.appendChild( h( 'div', { class: 'ask-own' }, [ input, h( 'button', { class: 'btn small ghost', onclick: askOwn }, [ 'Ask' ] ) ] ) );
+		box.classList.add( 'show' );
+		position( box, item.el, 'below' );
+	}
+
+	function askClaude( item, ask ) {
+		var before = item.el.innerText.trim();
+		var box = ui.ask;
+		var asking = state.asking = { id: item.id };
+		box.textContent = '';
+		box.appendChild( h( 'p', { class: 'ask-wait', 'aria-live': 'polite' }, [ h( 'span', { class: 'dot' } ), 'Claude is writing a version…' ] ) );
+		position( box, item.el, 'below' );
+		api( '/suggest', { method: 'POST', body: { tag: item.tag, text: before, ask: ask } } ).then( function ( data ) {
+			if ( asking !== state.asking ) {
+				return;
+			}
+			if ( ! data.text ) {
+				throw new Error( 'Claude didn\'t send any words back. Try again.' );
+			}
+			showProposal( item, before, data );
+		} ).catch( function ( error ) {
+			if ( asking !== state.asking ) {
+				return;
+			}
+			box.textContent = '';
+			box.appendChild( h( 'p', { class: 'error', text: error.message } ) );
+			box.appendChild( h( 'button', { class: 'btn small ghost', onmousedown: keepFocus, onclick: function () {
+				showAsk( item );
+			} }, [ 'Back' ] ) );
+			position( box, item.el, 'below' );
+		} );
+	}
+
+	function showProposal( item, before, data ) {
+		var box = ui.ask;
+		box.textContent = '';
+		box.appendChild( h( 'div', { class: 'proposal' }, [
+			h( 'p', { class: 'was' }, [ h( 'span', { class: 'tb-label', text: 'Now' } ), before ] ),
+			h( 'p', { class: 'new' }, [ h( 'span', { class: 'tb-label', text: 'Claude suggests' } ), data.text ] ),
+			data.note ? h( 'p', { class: 'meta', text: data.note } ) : null,
+			h( 'div', { class: 'row' }, [
+				h( 'button', { class: 'btn small primary', onmousedown: keepFocus, onclick: function () {
+					setText( item.el, data.text );
+					touch( item );
+					placeToolbar( item );
+					showAsk( item );
+					announce( 'Used Claude\'s version. It is not live until you publish.' );
+				} }, [ 'Use this' ] ),
+				h( 'button', { class: 'btn small ghost', onmousedown: keepFocus, onclick: function () {
+					showAsk( item );
+				} }, [ 'Keep mine' ] )
+			] )
+		] ) );
+		position( box, item.el, 'below' );
+		box.querySelector( '.btn.primary' ).focus( { preventScroll: true } );
+	}
+
+	/** Plain text into an element, line breaks kept as <br>. */
+	function setText( el, text ) {
+		el.textContent = '';
+		String( text ).split( /\r?\n/ ).forEach( function ( line, i ) {
+			if ( i ) {
+				el.appendChild( document.createElement( 'br' ) );
+			}
+			el.appendChild( document.createTextNode( line ) );
+		} );
+	}
+
 	/** Places a floating element next to a page element (fixed position, kept inside the viewport). */
 	function position( floating, target, where ) {
 		var rect = target.getBoundingClientRect();
@@ -670,6 +814,34 @@
 		ui.chip.classList.remove( 'show' );
 	}
 
+	/** "Replace photo" on the image under the pointer: straight to the Media Library. */
+	function showPhoto( item ) {
+		var rect = item.el.getBoundingClientRect();
+		if ( rect.width < 120 || rect.height < 80 || state.popover === item.id ) {
+			hidePhoto();
+			return;
+		}
+		state.photo = item.id;
+		ui.photo.classList.add( 'show' );
+		placePhoto();
+	}
+
+	function placePhoto() {
+		var item = state.photo && state.items[ state.photo ];
+		if ( ! item ) {
+			return;
+		}
+		var rect = item.el.getBoundingClientRect();
+		var width = ui.photo.offsetWidth || 150;
+		ui.photo.style.top = Math.round( Math.max( 8, rect.top ) + 14 ) + 'px';
+		ui.photo.style.left = Math.round( Math.min( rect.right, window.innerWidth ) - width - 14 ) + 'px';
+	}
+
+	function hidePhoto() {
+		state.photo = null;
+		ui.photo.classList.remove( 'show' );
+	}
+
 	/* ---------- Popovers: images and link addresses ---------- */
 
 	function closePopover() {
@@ -701,6 +873,7 @@
 	}
 
 	function openImagePopover( item ) {
+		hidePhoto();
 		openPopover( item, function ( box ) {
 			var el = item.el;
 			var thumb = h( 'img', { class: 'thumb', src: el.currentSrc || el.getAttribute( 'src' ), alt: '' } );
@@ -724,6 +897,7 @@
 		} );
 	}
 
+	/** The Media Library picker. thumb and alt are the image popover's, when it is open. */
 	function pickImage( item, thumb, alt ) {
 		if ( ! window.wp || ! window.wp.media ) {
 			toast( 'The Media Library didn\'t load. Reload the page and try again.' );
@@ -746,11 +920,15 @@
 			item.original.sources.forEach( function ( source ) {
 				source.remove();
 			} );
-			if ( file.alt && ! alt.value ) {
-				alt.value = file.alt;
+			if ( file.alt && ! ( alt ? alt.value : el.getAttribute( 'alt' ) ) ) {
+				if ( alt ) {
+					alt.value = file.alt;
+				}
 				el.setAttribute( 'alt', file.alt );
 			}
-			thumb.src = size.url || file.url;
+			if ( thumb ) {
+				thumb.src = size.url || file.url;
+			}
 			touch( item );
 		} );
 		frame.open();
@@ -914,34 +1092,38 @@
 
 	var SOURCE = { 'live-edit': 'Live Edit', studio: 'Studio', restore: 'Restored', migration: 'Moved off Elementor', admin: 'Deft pages screen' };
 
+	var WHAT = { 'live-edit': 'Changed in Live Edit', studio: 'Page published from Studio', restore: 'Older version put back', migration: 'Moved off Elementor', admin: 'Published from the Deft pages screen' };
+
+	/** Revisions, kept 30 days: what changed, who and when. The live one says Live; any other is a Restore away. */
 	function renderHistory( panel ) {
-		panel.appendChild( panelHead( 'Revisions', 'Every version that went live, kept 30 days' ) );
-		var list = h( 'ol', { class: 'timeline' }, [ h( 'li', { class: 'loading', text: 'Loading versions…' } ) ] );
+		panel.appendChild( panelHead( 'Revisions', 'Kept 30 days' ) );
+		var list = h( 'ol', { class: 'timeline' }, [ h( 'li', { class: 'loading', text: 'Loading revisions…' } ) ] );
 		panel.appendChild( list );
+		panel.appendChild( h( 'div', { class: 'panel-foot' }, [
+			h( 'p', { class: 'meta', text: 'Every publish saves a revision. Restore puts an older one back live, and the one it replaces stays here. Clients never see these controls.' } )
+		] ) );
 		api( '/revisions' ).then( function ( data ) {
 			list.textContent = '';
 			if ( ! data.revisions.length ) {
-				list.appendChild( h( 'li', { class: 'empty', text: 'No versions yet. The first publish starts the history.' } ) );
+				list.appendChild( h( 'li', { class: 'empty', text: 'No revisions yet. The first publish starts the list.' } ) );
 			}
 			data.revisions.forEach( function ( rev, index ) {
 				var current = rev.hash === state.base && 0 === index;
 				var changes = ( rev.changes || [] ).slice( 0, 3 ).map( function ( c ) {
-					return h( 'li', {}, 'text' === c.kind ? [ h( 'del', { text: shorten( c.before ) } ), ' → ', h( 'ins', { text: shorten( c.after ) } ) ] : [ 'image' === c.kind ? 'Image replaced' : 'Link → ' + shorten( c.after ) ] );
+					return h( 'li', {}, 'text' === c.kind ? [ h( 'del', { text: shorten( c.before ) } ), ' → ', h( 'ins', { text: shorten( c.after ) } ) ] : [ 'image' === c.kind ? 'Photo replaced' : 'Link → ' + shorten( c.after ) ] );
 				} );
 				var actions = h( 'div', { class: 'row' } );
-				if ( ! current ) {
-					actions.appendChild( h( 'button', { class: 'btn tiny ghost', onclick: function () {
-						confirmRestore( actions, rev );
-					} }, [ icon( 'restore' ), 'Restore this version' ] ) );
-				}
 				list.appendChild( h( 'li', { class: current ? 'current' : '' }, [
 					h( 'span', { class: 'node' } ),
 					h( 'div', { class: 'rev' }, [
-						h( 'p', { class: 'rev-head' }, [ h( 'b', { text: ago( rev.created ) } ), ' · ' + ( rev.actor || 'Someone' ), h( 'span', { class: 'tag', text: SOURCE[ rev.source ] || rev.source } ), current ? h( 'span', { class: 'tag live', text: 'Live now' } ) : null ] ),
-						rev.note ? h( 'p', { class: 'meta', text: rev.note } ) : null,
+						h( 'p', { class: 'rev-what', text: rev.note || WHAT[ rev.source ] || 'Published' } ),
+						h( 'p', { class: 'rev-head', text: ( rev.actor || 'Someone' ) + ' · ' + ago( rev.created ) } ),
 						changes.length ? h( 'ul', { class: 'mini' }, changes ) : null,
 						actions
-					] )
+					] ),
+					current ? h( 'span', { class: 'tag live', text: 'Live' } ) : h( 'button', { class: 'btn tiny ghost', 'aria-label': 'Restore the revision from ' + ago( rev.created ), onclick: function () {
+						confirmRestore( actions, rev );
+					} }, [ icon( 'restore' ), 'Restore' ] )
 				] ) );
 			} );
 		} ).catch( function ( error ) {
@@ -957,7 +1139,7 @@
 
 	function confirmRestore( actions, rev ) {
 		actions.textContent = '';
-		actions.appendChild( h( 'span', { class: 'meta', text: 'Put this version back live? The current one stays in the history.' } ) );
+		actions.appendChild( h( 'span', { class: 'meta', text: changed().length ? 'Put this revision back live? Your unsaved changes are thrown away, and the live one stays in the list.' : 'Put this revision back live? The live one stays in the list.' } ) );
 		actions.appendChild( h( 'button', { class: 'btn tiny primary', onclick: function () {
 			actions.textContent = 'Restoring…';
 			api( '/restore', { method: 'POST', body: { revision: rev.id } } ).then( function () {
@@ -973,6 +1155,153 @@
 		actions.appendChild( h( 'button', { class: 'btn tiny ghost', onclick: function () {
 			renderPanel();
 		} }, [ 'Cancel' ] ) );
+	}
+
+	/* ---------- Desktop and Phone ---------- */
+
+	function setView( view ) {
+		if ( view === state.view ) {
+			return;
+		}
+		state.view = view;
+		if ( 'phone' === view ) {
+			openPhone();
+		} else {
+			ui.phone.classList.remove( 'show' );
+			ui.phone.textContent = '';
+			ui.phoneFrame = null;
+		}
+		renderDock();
+	}
+
+	/**
+	 * The page at 390 x 844 in a frame (deft_frame=1, so no Live Edit, admin bar or tracking inside it), with the
+	 * unsaved changes copied in. Clicking an outlined part goes back to Desktop with that part open.
+	 */
+	function openPhone() {
+		deactivate();
+		closePopover();
+		closePanel();
+		hidePhoto();
+		hideChip();
+		var url = new URL( liveUrl() );
+		url.searchParams.set( 'deft_frame', '1' );
+		var frame = h( 'iframe', { title: 'This page on a phone', src: url.toString() } );
+		frame.addEventListener( 'load', function () {
+			wirePhone();
+			syncPhone();
+		} );
+		ui.phoneFrame = frame;
+		ui.phone.textContent = '';
+		ui.phone.appendChild( h( 'div', { class: 'phone-col' }, [
+			h( 'div', { class: 'phone-fit' }, [ h( 'div', { class: 'device' }, [ frame ] ) ] ),
+			h( 'p', { class: 'phone-note', text: changed().length ? 'Your changes are in, not live yet. Click an outlined part to edit it.' : 'Click an outlined part to edit it.' } )
+		] ) );
+		ui.phone.classList.add( 'show' );
+		fitPhone();
+	}
+
+	function fitPhone() {
+		var fit = ui.phone.querySelector( '.phone-fit' );
+		if ( ! fit ) {
+			return;
+		}
+		var scale = Math.min( 1, ( window.innerHeight - 150 ) / 868, ( window.innerWidth - 32 ) / 414 );
+		fit.style.width = Math.round( 414 * scale ) + 'px';
+		fit.style.height = Math.round( 868 * scale ) + 'px';
+		fit.firstChild.style.transform = 'scale(' + scale + ')';
+	}
+
+	function phoneDoc() {
+		try {
+			return ui.phoneFrame && ui.phoneFrame.contentDocument && ui.phoneFrame.contentDocument.body ? ui.phoneFrame.contentDocument : null;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	/** Copies each editable part's current text, link or image into the phone frame. */
+	function syncPhone() {
+		var doc = phoneDoc();
+		if ( ! doc ) {
+			return;
+		}
+		state.order.forEach( function ( id ) {
+			var item = state.items[ id ];
+			var el = doc.querySelector( '[data-deft-edit="' + id + '"]' );
+			if ( ! el ) {
+				return;
+			}
+			if ( 'image' === item.kind ) {
+				[ 'src', 'srcset', 'sizes', 'alt' ].forEach( function ( attr ) {
+					var value = item.el.getAttribute( attr );
+					if ( null === value ) {
+						el.removeAttribute( attr );
+					} else if ( el.getAttribute( attr ) !== value ) {
+						el.setAttribute( attr, value );
+					}
+				} );
+				if ( el.parentElement && 'PICTURE' === el.parentElement.tagName && ! item.el.parentElement.querySelector( 'source' ) ) {
+					el.parentElement.querySelectorAll( 'source' ).forEach( function ( source ) {
+						source.remove();
+					} );
+				}
+			} else {
+				if ( 'text' === item.kind && el.innerHTML !== item.el.innerHTML ) {
+					el.innerHTML = item.el.innerHTML;
+				}
+				if ( null !== item.original.href ) {
+					el.setAttribute( 'href', item.el.getAttribute( 'href' ) || '' );
+				}
+			}
+			if ( edit( item ) ) {
+				el.setAttribute( 'data-deft-le', 'changed' );
+			} else {
+				el.removeAttribute( 'data-deft-le' );
+			}
+		} );
+	}
+
+	function wirePhone() {
+		var doc = phoneDoc();
+		if ( ! doc || doc.getElementById( 'deft-le-page' ) ) {
+			return;
+		}
+		var style = doc.createElement( 'style' );
+		style.id = 'deft-le-page';
+		style.textContent = '[data-deft-edit]{outline:1.5px dashed rgba(51,80,240,.55);outline-offset:2px;cursor:pointer}' +
+			'[data-deft-le="changed"]{outline:2px solid rgba(255,199,0,.95)}';
+		doc.head.appendChild( style );
+		doc.addEventListener( 'click', function ( e ) {
+			e.preventDefault();
+			var el = e.target.closest && e.target.closest( '[data-deft-edit]' );
+			if ( ! el ) {
+				return;
+			}
+			if ( ! state.on ) {
+				start();
+			}
+			var item = null;
+			while ( el && ! item ) {
+				item = state.items[ el.getAttribute( 'data-deft-edit' ) ] || null;
+				el = el.parentElement && el.parentElement.closest( '[data-deft-edit]' );
+			}
+			if ( ! item ) {
+				return;
+			}
+			setView( 'desktop' );
+			item.el.scrollIntoView( { behavior: 'auto', block: 'center' } );
+			if ( 'image' === item.kind ) {
+				openImagePopover( item );
+			} else if ( 'link' === item.kind ) {
+				openLinkPopover( item );
+			} else {
+				activate( item );
+			}
+		}, true );
+		doc.addEventListener( 'submit', function ( e ) {
+			e.preventDefault();
+		}, true );
 	}
 
 	/* ---------- Publishing ---------- */
@@ -1230,11 +1559,19 @@
 		if ( ! state.on || state.busy ) {
 			return;
 		}
+		if ( e.target === ui.host ) {
+			return; // On our own controls, such as the Replace photo button.
+		}
 		var item = itemFrom( e.target );
 		if ( item ) {
 			showChip( item );
 		} else {
 			hideChip();
+		}
+		if ( item && 'image' === item.kind ) {
+			showPhoto( item );
+		} else {
+			hidePhoto();
 		}
 	} );
 
@@ -1243,6 +1580,9 @@
 		if ( item && item.el.contains( e.target ) ) {
 			touch( item );
 			placeToolbar( item );
+			if ( ui.ask.classList.contains( 'show' ) && ! state.asking ) {
+				showAsk( item ); // The words changed; a chip or the ask box can vanish if a link appeared.
+			}
 		}
 	} );
 
@@ -1263,7 +1603,13 @@
 	document.addEventListener( 'keydown', function ( e ) {
 		var mod = e.metaKey || e.ctrlKey;
 		var item = state.active && state.items[ state.active ];
-		if ( item && 'Enter' === e.key && ! mod ) {
+		var inUi = e.composedPath && e.composedPath().indexOf( ui.host ) >= 0;
+		if ( 'Escape' === e.key && 'phone' === state.view && ! state.panel ) {
+			e.preventDefault();
+			setView( 'desktop' );
+			return;
+		}
+		if ( item && 'Enter' === e.key && ! mod && ! inUi ) {
 			// No new paragraphs inside an element: Enter is a line break, and in headings and buttons it ends editing.
 			e.preventDefault();
 			if ( e.shiftKey || ! SINGLE_LINE[ item.tag ] ) {
@@ -1300,7 +1646,6 @@
 			publish( ui.publishNote ? ui.publishNote.value : '' );
 			return;
 		}
-		var inUi = e.composedPath && e.composedPath().indexOf( ui.host ) >= 0;
 		if ( ! mod && ! e.altKey && 'e' === e.key.toLowerCase() && ! isTyping( e.target ) && ! inUi && ! state.busy ) {
 			e.preventDefault();
 			if ( state.on ) {
@@ -1315,13 +1660,20 @@
 		if ( state.active && state.items[ state.active ] ) {
 			position( ui.toolbar, state.items[ state.active ].el, 'above' );
 		}
+		if ( state.active && ui.ask.classList.contains( 'show' ) && state.items[ state.active ] ) {
+			position( ui.ask, state.items[ state.active ].el, 'below' );
+		}
 		if ( state.popover && state.items[ state.popover ] ) {
 			position( ui.popover, state.items[ state.popover ].el, 'below' );
 		}
+		placePhoto();
 		hideChip();
 	}
 	window.addEventListener( 'scroll', follow, { passive: true } );
-	window.addEventListener( 'resize', follow );
+	window.addEventListener( 'resize', function () {
+		follow();
+		fitPhone();
+	} );
 
 	window.addEventListener( 'beforeunload', function ( e ) {
 		if ( state.on && changed().length ) {
