@@ -16,7 +16,7 @@
  * - Deft Studio, through Deft Central, with requests signed by the site's Central secret. Off until "Let Deft Studio
  *   publish pages" is ticked.
  *
- * REST API (namespace deft/v1), documented in docs/pages-api.md:
+ * REST API (namespace deft/v1), documented in Deft Central's docs/deft-pages.md:
  *   GET    /pages                          Deft pages on this site
  *   POST   /pages                          new page (saved as a draft)
  *   GET    /pages/{id}                     one page: live and draft markup, preview link, editable outline

@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.7.2
+Stable tag: 0.8.0
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,15 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.8.0 =
+* Deft pages: pages stored as plain HTML on a Deft template (with or without the theme header and footer), with drafts, one-hour preview links, 30 days of history and restore. Going live clears the page cache and tells Deft Central, which clears Hostinger's cache and CDN.
+* Deft Studio can publish pages through Deft Central with signed requests. Off until "Let Deft Studio publish pages" is ticked.
+* Live Edit for Deft staff: change headings, text, images, alt text and links right on the page, review the changes, publish, undo. Off until switched on.
+* Deft pages screen in wp-admin: every Deft page with its draft, HTML and history, plus new pages.
+* Move off Elementor: convert HTML-widget pages into Deft pages one at a time, compare draft and live side by side, go live, and go back to Elementor at any time.
+* Site watch: a signed, read-only health report (versions, updates, administrators, spam posts, PHP files in uploads, failed emails) for Deft Central's daily check.
+* Settings > Deft lists only Deft's own staff as able to change Deft pages; clients opening one in the editor are told Deft looks after it.
 
 = 0.7.2 =
 * Form error messages no longer mention WhatsApp on client sites (our own site keeps its wording through data/site.json).
