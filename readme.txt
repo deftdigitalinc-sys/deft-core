@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.4
+Stable tag: 0.9.5
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,9 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.5 =
+* Connect from Deft Central: Central's Connect button uploads wp-content/mu-plugins/deft-central.php, which defines DEFT_CORE_CENTRAL_URL, DEFT_CORE_CENTRAL_SITE_ID and DEFT_CORE_CENTRAL_SECRET. When it's there the site is connected with nothing to paste: leads go to Central, Site watch's inside checks work, and Settings > Deft shows "Set by Deft Central". The file survives plugin updates and keeps the secret out of the database. Delete it to disconnect. The endpoint and site ID can also be set by hand in wp-config.php, like the secret.
 
 = 0.9.4 =
 * Coming soon and maintenance mode: Settings > Deft > Coming soon and maintenance. Pick Coming soon (site still being built) or Maintenance (down for a short while) and visitors get a clean Deft-styled page with the site's logo and name, a message, and optional Call and Email buttons. Anyone logged in who can edit posts sees the real site, with a yellow reminder in the admin bar. Search engines get a 503 so nothing half-built is indexed. A private link lets the client see the site without an account. Login, wp-admin, forms, Deft Central and preview links keep working. Switching clears the page cache. Replaces separate coming soon plugins and Hostinger's generic page.

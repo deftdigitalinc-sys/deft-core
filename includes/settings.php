@@ -97,7 +97,12 @@ function deft_core_sanitize( $input ) {
 		add_settings_error( 'deft_core', 'central_secret', __( 'The Deft Central secret looks too short. Paste the whole secret from the register-site script.', 'deft-core' ) );
 	}
 	$out['central_enabled'] = empty( $input['central_enabled'] ) ? 0 : 1;
-	if ( $out['central_enabled'] && ! ( $out['central_url'] && $out['central_site_id'] && ( strlen( $out['central_secret'] ) >= 32 || defined( 'DEFT_CORE_CENTRAL_SECRET' ) ) ) ) {
+	if ( function_exists( 'deft_central_connected_by_file' ) && deft_central_connected_by_file() ) {
+		// Deft Central's connection file wins; saving once wipes any pasted copy from the database.
+		$out['central_url']     = '';
+		$out['central_site_id'] = '';
+		$out['central_secret']  = '';
+	} elseif ( $out['central_enabled'] && ! ( $out['central_url'] && $out['central_site_id'] && ( strlen( $out['central_secret'] ) >= 32 || defined( 'DEFT_CORE_CENTRAL_SECRET' ) ) ) ) {
 		$out['central_enabled'] = 0;
 		add_settings_error( 'deft_core', 'central_enabled', __( 'Deft Central needs an endpoint, a site ID and a secret before it can be switched on. Left it off.', 'deft-core' ) );
 	}
@@ -160,6 +165,17 @@ function deft_core_settings_page() {
 			</table>
 			<h2 id="deft-central"><?php esc_html_e( 'Deft Central', 'deft-core' ); ?></h2>
 			<p><?php esc_html_e( 'Sends each lead to Deft Central as well. The email and the Leads list keep working either way. Get the endpoint, site ID and secret from the register-site script in Deft Central.', 'deft-core' ); ?></p>
+			<?php if ( function_exists( 'deft_central_connected_by_file' ) && deft_central_connected_by_file() ) : ?>
+			<table class="form-table" role="presentation">
+				<tr><th scope="row"><?php esc_html_e( 'Connection', 'deft-core' ); ?></th>
+					<td><p><strong><?php esc_html_e( 'Set by Deft Central.', 'deft-core' ); ?></strong> <?php esc_html_e( 'Leads go to Central and Central can check this site. Nothing to paste here.', 'deft-core' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Stored in wp-content/mu-plugins/deft-central.php. Deleting that file disconnects the site.', 'deft-core' ); ?></p></td></tr>
+				<tr><th scope="row"><?php esc_html_e( 'Endpoint', 'deft-core' ); ?></th>
+					<td><code><?php echo esc_html( deft_central_url() ? deft_central_url() : __( 'not https, so not used', 'deft-core' ) ); ?></code></td></tr>
+				<tr><th scope="row"><?php esc_html_e( 'Site ID', 'deft-core' ); ?></th>
+					<td><code><?php echo esc_html( deft_central_site_id() ); ?></code></td></tr>
+			</table>
+			<?php else : ?>
 			<table class="form-table" role="presentation">
 				<tr><th scope="row"><?php esc_html_e( 'Send leads to Central', 'deft-core' ); ?></th>
 					<td><label><input type="checkbox" name="deft_core[central_enabled]" value="1" <?php checked( $s['central_enabled'] ); ?>> <?php esc_html_e( 'On', 'deft-core' ); ?></label></td></tr>
@@ -177,6 +193,7 @@ function deft_core_settings_page() {
 					<?php endif; ?>
 					</td></tr>
 			</table>
+			<?php endif; ?>
 			<?php do_action( 'deft_core_settings_sections', $s ); ?>
 			<?php submit_button(); ?>
 		</form>

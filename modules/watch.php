@@ -263,7 +263,7 @@ function deft_watch_report() {
 
 	return array(
 		'schema'   => 'deft.health.v1',
-		'site'     => deft_core_setting( 'central_site_id' ),
+		'site'     => deft_central_site_id(),
 		'at'       => gmdate( 'c' ),
 		'status'   => $findings ? $findings[0]['level'] : 'good',
 		'findings' => $findings,

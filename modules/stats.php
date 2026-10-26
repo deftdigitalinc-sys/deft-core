@@ -66,7 +66,7 @@ function deft_stats_rest( WP_REST_Request $request ) {
 	return rest_ensure_response(
 		array(
 			'schema'   => 'deft.stats.v1',
-			'site'     => array( 'id' => (string) deft_core_setting( 'central_site_id' ), 'url' => home_url( '/' ), 'version' => DEFT_CORE_VERSION ),
+			'site'     => array( 'id' => deft_central_site_id(), 'url' => home_url( '/' ), 'version' => DEFT_CORE_VERSION ),
 			'month'    => $month,
 			'complete' => $month < wp_date( 'Y-m' ),
 			'tracking' => (bool) deft_core_setting( 'tracking_enabled' ),

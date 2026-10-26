@@ -14,13 +14,27 @@ defined( 'ABSPATH' ) || exit;
 
 const DEFT_CENTRAL_BACKOFF = array( 60, 300, 1800, 7200, 21600, 86400 );
 
+/**
+ * Whether Deft Central set this site up itself: its Connect button uploads wp-content/mu-plugins/deft-central.php,
+ * which defines DEFT_CORE_CENTRAL_URL, DEFT_CORE_CENTRAL_SITE_ID and DEFT_CORE_CENTRAL_SECRET. That file loads before
+ * plugins, survives plugin updates and keeps the secret out of the database. Deleting it disconnects the site.
+ */
+function deft_central_connected_by_file() {
+	return defined( 'DEFT_CORE_CENTRAL_URL' ) && defined( 'DEFT_CORE_CENTRAL_SITE_ID' ) && defined( 'DEFT_CORE_CENTRAL_SECRET' );
+}
+
 function deft_central_secret() {
 	return defined( 'DEFT_CORE_CENTRAL_SECRET' ) ? (string) DEFT_CORE_CENTRAL_SECRET : (string) deft_core_setting( 'central_secret' );
 }
 
+function deft_central_site_id() {
+	$id = defined( 'DEFT_CORE_CENTRAL_SITE_ID' ) ? (string) DEFT_CORE_CENTRAL_SITE_ID : (string) deft_core_setting( 'central_site_id' );
+	return preg_replace( '/[^a-z0-9-]/', '', strtolower( $id ) );
+}
+
 /** The endpoint, if usable: https, or plain http only on this machine (local testing). */
 function deft_central_url() {
-	$url    = (string) deft_core_setting( 'central_url' );
+	$url    = defined( 'DEFT_CORE_CENTRAL_URL' ) ? (string) DEFT_CORE_CENTRAL_URL : (string) deft_core_setting( 'central_url' );
 	$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
 	$host   = wp_parse_url( $url, PHP_URL_HOST );
 	$ok     = $host && ( 'https' === $scheme || ( 'http' === $scheme && in_array( $host, array( 'localhost', '127.0.0.1' ), true ) ) );
@@ -29,11 +43,11 @@ function deft_central_url() {
 
 /** Whether the settings let us talk to Central at all (ignores the on/off switch). */
 function deft_central_configured() {
-	return deft_central_url() && deft_core_setting( 'central_site_id' ) && strlen( deft_central_secret() ) >= 32;
+	return deft_central_url() && deft_central_site_id() && strlen( deft_central_secret() ) >= 32;
 }
 
 function deft_central_ready() {
-	return deft_core_setting( 'central_enabled' ) && deft_central_configured();
+	return ( deft_central_connected_by_file() || deft_core_setting( 'central_enabled' ) ) && deft_central_configured();
 }
 
 /* ---------- Requests from Central ---------- */
@@ -46,7 +60,7 @@ function deft_central_ready() {
  */
 function deft_central_verify_request( WP_REST_Request $request ) {
 	$secret = deft_central_secret();
-	if ( strlen( $secret ) < 32 || ! deft_core_setting( 'central_site_id' ) ) {
+	if ( strlen( $secret ) < 32 || ! deft_central_site_id() ) {
 		return new WP_Error( 'deft_unsigned', __( 'This site has no Deft Central secret yet.', 'deft-core' ), array( 'status' => 401 ) );
 	}
 	$timestamp = (string) $request->get_header( 'X-Deft-Timestamp' );
@@ -202,7 +216,7 @@ function deft_central_payload( $lead_id ) {
 	return array(
 		'schema'       => 'deft.lead.v1',
 		'submissionId' => $submission_id,
-		'site'         => array( 'id' => deft_core_setting( 'central_site_id' ), 'url' => home_url( '/' ) ),
+		'site'         => array( 'id' => deft_central_site_id(), 'url' => home_url( '/' ) ),
 		'form'         => array( 'key' => $key, 'label' => $forms[ $key ]['label'] ?? $key ),
 		'submittedAt'  => get_post_time( 'c', true, $lead_id ),
 		'fields'       => $values,
@@ -231,7 +245,7 @@ function deft_central_post( $payload, $timeout = 15 ) {
 			'timeout' => (int) $timeout,
 			'headers' => array(
 				'Content-Type'     => 'application/json',
-				'X-Deft-Site'      => deft_core_setting( 'central_site_id' ),
+				'X-Deft-Site'      => deft_central_site_id(),
 				'X-Deft-Timestamp' => (string) $timestamp,
 				'X-Deft-Signature' => 'v1=' . hash_hmac( 'sha256', $timestamp . '.' . $body, deft_central_secret() ),
 			),
@@ -329,7 +343,7 @@ function deft_central_ping() {
 	check_admin_referer( 'deft_central_ping' );
 	$result = array( 'ok' => false, 'error' => __( 'Fill in the endpoint (https), site ID and secret, and save first.', 'deft-core' ) );
 	if ( deft_central_configured() ) {
-		$result = deft_central_post( array( 'schema' => 'deft.ping.v1', 'site' => array( 'id' => deft_core_setting( 'central_site_id' ) ) ) );
+		$result = deft_central_post( array( 'schema' => 'deft.ping.v1', 'site' => array( 'id' => deft_central_site_id() ) ) );
 	}
 	set_transient( 'deft_central_ping_' . get_current_user_id(), $result['ok'] ? 'ok' : $result['error'], 60 );
 	wp_safe_redirect( admin_url( 'options-general.php?page=deft-core#deft-central' ) );
