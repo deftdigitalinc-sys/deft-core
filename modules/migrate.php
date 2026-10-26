@@ -199,9 +199,10 @@ function deft_migrate_check_result( $post_id ) {
 
 /**
  * Saves what the board found comparing the live page and the draft. $sizes maps phone/tablet/desktop to the
- * differences found at that width (plain sentences); a draft matches when none were found at any size.
+ * differences found at that width (plain sentences); a draft matches when none were found at any size. $areas holds
+ * where on the page they are ({ top, height, label } in draft pixels), so Compare can outline them.
  */
-function deft_migrate_save_check( $post_id, array $sizes ) {
+function deft_migrate_save_check( $post_id, array $sizes, array $areas = array() ) {
 	$draft = get_post_meta( $post_id, '_deft_page_draft', true );
 	if ( ! is_array( $draft ) ) {
 		return new WP_Error( 'deft_migrate_no_draft', __( 'Convert the page first.', 'deft-core' ), array( 'status' => 409 ) );
@@ -213,10 +214,25 @@ function deft_migrate_save_check( $post_id, array $sizes ) {
 			return mb_substr( sanitize_text_field( (string) $issue ), 0, 240 );
 		}, array_slice( $issues, 0, 12 ) ) ) );
 	}
+	$boxes = array();
+	foreach ( array( 'phone', 'tablet', 'desktop' ) as $size ) {
+		$list            = isset( $areas[ $size ] ) && is_array( $areas[ $size ] ) ? array_slice( $areas[ $size ], 0, 8 ) : array();
+		$boxes[ $size ] = array_values( array_filter( array_map( function ( $box ) {
+			if ( ! is_array( $box ) || ! isset( $box['top'], $box['height'] ) ) {
+				return null;
+			}
+			return array(
+				'top'    => max( 0, min( 60000, (int) $box['top'] ) ),
+				'height' => max( 20, min( 4000, (int) $box['height'] ) ),
+				'label'  => isset( $box['label'] ) ? mb_substr( sanitize_text_field( (string) $box['label'] ), 0, 120 ) : '',
+			);
+		}, $list ) ) );
+	}
 	$check = array(
 		'hash'  => (string) $draft['hash'],
 		'ok'    => ! array_filter( $clean ),
 		'sizes' => $clean,
+		'areas' => $boxes,
 		'at'    => gmdate( 'c' ),
 		'by'    => deft_pages_actor(),
 	);
@@ -587,7 +603,8 @@ function deft_migrate_rest_check( WP_REST_Request $request ) {
 		return $post;
 	}
 	$sizes  = $request->get_param( 'sizes' );
-	$result = deft_migrate_save_check( $post->ID, is_array( $sizes ) ? $sizes : array() );
+	$areas  = $request->get_param( 'areas' );
+	$result = deft_migrate_save_check( $post->ID, is_array( $sizes ) ? $sizes : array(), is_array( $areas ) ? $areas : array() );
 	return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => $result['ok'], 'board' => deft_migrate_board() ) );
 }
 

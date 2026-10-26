@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,11 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.1 =
+* Move off Elementor: every page row shows a thumbnail of the page. Compare opens right under the board with the live page and the Deft draft side by side, scrolling together, and what the check found is outlined and numbered on the page. Click a difference to jump to it. Full screen still has the slider and flip.
+* The check now saves where each difference is, so Compare can outline it.
+* Pages shown inside Deft Core's own screens (thumbnails, Compare, the check) no longer count as visits.
 
 = 0.9.0 =
 * Client reports: Deft Central can read a month's totals (visits, calls and taps, forms, leads, sources, top pages, Google searches, and the month before) through a signed, read-only GET /deft/v1/stats/YYYY-MM, to draft the client's monthly report. No visitor-level details leave the site. On by default; Settings > Deft > Client reports turns it off.
