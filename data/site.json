@@ -1,0 +1,15 @@
+{
+ "_note": "Deft Digital's own site. Only in the zip built for deftdigitalmedia.com; client zips leave this file out, so client sites get neutral defaults.",
+ "defaults": {
+  "recipients": "contact@deftdigitalmedia.com",
+  "from_name": "Deft Digital",
+  "from_email": "contact@deftdigitalmedia.com",
+  "autoreply_subject": "Got it, {name}. Your free preview is on the way",
+  "autoreply_body": "Hi {name},\n\nThanks for sending us the details for {business}. We'll start on your free homepage preview and get back to you within one business day, usually by WhatsApp or a quick call.\n\nWant to add anything, like your logo, a few job photos or a site you like? Just reply to this email, or message Camila on WhatsApp at (561) 671-9316.\n\nCamila and Daniel\nDeft Digital"
+ },
+ "thanks": "Got it, thank you! Camila or Daniel will be in touch within one business day with your preview.",
+ "messages": {
+  "rate_limited": "Too many sends in a row. Please wait a few minutes, or message us on WhatsApp.",
+  "save_failed": "That didn't go through. Please try again, or message us on WhatsApp."
+ }
+}

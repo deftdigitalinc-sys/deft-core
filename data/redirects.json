@@ -1,0 +1,9 @@
+{
+ "/services/marketing/": "/services/get-found/",
+ "/digital-marketing-services-for-businesses/": "/services/get-found/",
+ "/website-plans/": "/services/websites/#plans",
+ "/custom-website-design/": "/services/websites/",
+ "/expert-branding-services/": "/services/branding/",
+ "/meet-the-team/": "/about/",
+ "/contact-deft-digital/": "/contact/"
+}
