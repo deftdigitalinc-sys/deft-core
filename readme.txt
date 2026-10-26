@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.8.1
+Stable tag: 0.9.0
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,9 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.0 =
+* Client reports: Deft Central can read a month's totals (visits, calls and taps, forms, leads, sources, top pages, Google searches, and the month before) through a signed, read-only GET /deft/v1/stats/YYYY-MM, to draft the client's monthly report. No visitor-level details leave the site. On by default; Settings > Deft > Client reports turns it off.
 
 = 0.8.1 =
 * Move off Elementor checks each converted page by itself: the live page and the draft are loaded at phone, tablet and desktop widths and compared (height, words, images, links, where headings sit). Pages that match go to a new Checked lane; pages that differ list the differences and can still "Go live anyway".
