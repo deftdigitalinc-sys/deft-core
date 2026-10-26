@@ -16,7 +16,7 @@
         "assets/track.js": "0c4a18290ed96a516defa52e93cd1a32fee69bb9",
         "bin/manifest.php": "80dd59238c71e8e273dfb0687086499382afd344",
         "data/us-zips.php": "ba66acb23e7e9c030424a46a2ca0f9f637db53ea",
-        "deft-core.php": "598d7464b30c238f13115527c958dd59727ae0cd",
+        "deft-core.php": "b3ebd2951912a972819c719f47df39e22c8ee9f4",
         "includes/cache.php": "463eb316216b98c9ae1b9675ab840bc75f7f148e",
         "includes/geo.php": "e8358949c3b59cb37d523bf54b6c6755b584d9f5",
         "includes/html.php": "f61ebb6894fae2ccc4a9886e6e6319ad5455347b",
@@ -31,19 +31,20 @@
         "modules/pages-admin.php": "5872f38b9816b28a173c80677401985805a39a05",
         "modules/pages.php": "07410a52a857875dbb170d2da625906f648fcfc6",
         "modules/reports.php": "4b0d70c45039d33efefe834103208561c916996b",
-        "modules/security.php": "fd07f6ec62391cfad40ce3da1a0068a686b73bbe",
+        "modules/security-login.php": "846eefec3c2b9c2406731990ee952fb22ec7d344",
+        "modules/security.php": "6121be458fba3da37d9f0fdeda204ca537085c5d",
         "modules/site.php": "a6d14e10e11dbb66b6a561cdd479b022d4eb7362",
         "modules/social.php": "80e262f8f0b637e537ecb0a3db26e5822b9c3fa3",
         "modules/soon.php": "53677576f428fdaf83b13721b58d5e9f8abeba74",
         "modules/stats.php": "8cdca28c12e8b39e49a5524f5a1328a9bec66fd6",
         "modules/tracking.php": "015bb4839b436b8c06baf9adb20f9a84e31d4e3e",
         "modules/watch.php": "0b73b252d141c429795f0be15296873e305b98ec",
-        "readme.txt": "0285513051b1c372db394bcae42c3c2eda5f08c4",
+        "readme.txt": "e08909181aee0496aead50fe41af41a74d3aadc8",
         "templates/deft-page.php": "442129ba3756afc31741d14a347d8964bc198047",
         "tests/fixtures/client-page.html": "588e962efa66fa03307d0ab7a0d511bedb3e5437",
         "tests/html-test.php": "d284f54ff91efaea7c0b85e3863e533f8aef344e",
-        "tests/security-test.php": "c5485059a0105880309accb2ac01f788994723bf",
+        "tests/security-test.php": "c9e835e14eb9283988c09e8335cfb52fe3af32ce",
         "tests/signed.php": "deedd0693b28a81387017d3703c66fff023052fc",
-        "uninstall.php": "7c936f455fc5c3a2271de537c3d2273b9745102b"
+        "uninstall.php": "d812823c1f1863e0929f32ee4265d2eb7ce34b29"
     }
 }

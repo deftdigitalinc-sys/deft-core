@@ -89,6 +89,7 @@ function wp_upload_dir() {
 }
 
 require dirname( __DIR__ ) . '/modules/security.php';
+require dirname( __DIR__ ) . '/modules/security-login.php';
 
 function put( $rel, $body ) {
 	$path = ABSPATH . $rel;
@@ -213,6 +214,17 @@ foreach ( array( 'backup.zip', 'db.sql', '.env', 'wp-config.php', '.user.ini', '
 foreach ( array( 'index.php', 'wp-login.php', 'style.css', 'logo.png' ) as $name ) {
 	check( "rules: $name allowed", 0 === preg_match( $pattern, $name ) );
 }
+
+// ---- Two-factor (RFC 6238 test vector: secret "12345678901234567890", T=59 -> 94287082, 6 digits 287082) ----
+$b32 = deft_sec_b32_encode( '12345678901234567890' );
+check( 'totp: base32 encodes the RFC secret', 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' === $b32 );
+check( 'totp: base32 round-trips', '12345678901234567890' === deft_sec_b32_decode( $b32 ) );
+check( 'totp: RFC 6238 code at T=59', '287082' === deft_sec_totp( $b32, 1 ) );
+check( 'totp: RFC 6238 code at T=1111111109', '081804' === deft_sec_totp( $b32, (int) floor( 1111111109 / 30 ) ) );
+check( 'totp: a code from one step ago still matches', false !== deft_sec_totp_match( $b32, '287082', 59 + 30 ) );
+check( 'totp: a code from two steps ago does not', false === deft_sec_totp_match( $b32, '287082', 59 + 60 ) );
+check( 'totp: spaces in the code are fine', 1 === deft_sec_totp_match( $b32, '287 082', 59 ) );
+check( 'totp: wrong code refused', false === deft_sec_totp_match( $b32, '000000', 59 ) );
 
 exec( 'rm -rf ' . escapeshellarg( $root ) );
 echo $fails ? "\n$fails failed\n" : "\nall passed\n";

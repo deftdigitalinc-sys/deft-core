@@ -18,6 +18,8 @@
  * - Security headers: nosniff and a referrer policy (HSTS is its own switch, off by default, because browsers remember
  *   it for a year).
  * - Plugin auto-updates (off by default; Elementor and WooCommerce are left to update by hand).
+ * - Two-factor codes for administrators, a "new passwords for everyone" button and a breached-password check live in
+ *   modules/security-login.php.
  *
  * File check (daily, and on demand): WordPress core and wordpress.org plugins against the official checksums, our own
  * files against data/manifest.json, everything else (premium plugins, the theme, must-use plugins, the web root)
@@ -919,16 +921,14 @@ function deft_sec_check_users( $add ) {
 	if ( $out['app_passwords'] ) {
 		$add( 'warn', 'app_passwords', sprintf( '%d users have application passwords. Deft sites don\'t use them; revoke them on each user\'s profile.', $out['app_passwords'] ) );
 	}
-	// Two-factor: only checkable where Wordfence Login Security keeps its table.
-	$wfls = $wpdb->base_prefix . 'wfls_2fa_secrets';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wfls ) ) === $wfls && $api_ids ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$with    = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT user_id FROM {$wfls}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$without = array_diff( $api_ids, $with );
-		if ( $without ) {
-			$names = wp_list_pluck( get_users( array( 'include' => $without, 'fields' => array( 'user_login' ) ) ), 'user_login' );
-			$add( 'warn', 'admin_no_2fa', sprintf( 'Administrators without two-factor login: %s (Wordfence > Login Security).', implode( ', ', $names ) ) );
+	// Two-factor: Deft Core's own (modules/security-login.php) or Wordfence Login Security's.
+	if ( function_exists( 'deft_sec_login_status' ) ) {
+		$login = deft_sec_login_status();
+		if ( $login['without_2fa'] ) {
+			$add( 'warn', 'admin_no_2fa', sprintf( 'Administrators without two-factor login: %s (Users > Profile > Two-factor login).', implode( ', ', $login['without_2fa'] ) ) );
 		}
-		$out['two_factor'] = count( $api_ids ) - count( $without );
+		$out['two_factor'] = $login['admins'] - count( $login['without_2fa'] );
+		$out['must_reset'] = $login['must_reset'];
 	}
 	return $out;
 }
@@ -1112,6 +1112,7 @@ function deft_sec_settings_fields( $s ) {
 			<?php endforeach; ?>
 			</fieldset>
 			<p class="description"><?php esc_html_e( 'Each one can be switched off here. Turning Deft Core off also takes them all out.', 'deft-core' ); ?></p></td></tr>
+		<?php do_action( 'deft_sec_settings_rows', $s ); ?>
 		<tr><th scope="row"><?php esc_html_e( 'File check', 'deft-core' ); ?></th>
 			<td><label><input type="checkbox" name="deft_core[sec_scan]" value="1" <?php checked( $s['sec_scan'] ); ?>> <?php esc_html_e( 'Check WordPress, plugins and the theme against their official files every night', 'deft-core' ); ?></label>
 			<p class="description"><?php
