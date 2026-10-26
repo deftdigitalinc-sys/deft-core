@@ -155,7 +155,8 @@ function deft_track_maybe_install() {
 
 add_action( 'wp_enqueue_scripts', 'deft_track_enqueue' );
 function deft_track_enqueue() {
-	if ( ! deft_core_setting( 'tracking_enabled' ) || is_preview() || is_customize_preview() ) {
+	// deft_frame: the page is inside a Deft Core screen (thumbnails, Compare, the check), not a visit.
+	if ( ! deft_core_setting( 'tracking_enabled' ) || is_preview() || is_customize_preview() || isset( $_GET['deft_frame'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return;
 	}
 	if ( deft_core_setting( 'tracking_exclude_staff' ) && current_user_can( 'edit_posts' ) ) {

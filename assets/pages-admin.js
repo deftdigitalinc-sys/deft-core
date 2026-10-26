@@ -443,6 +443,14 @@
 				] ) );
 			} );
 			main.appendChild( lanes );
+			var open = data.pages.filter( function ( p ) {
+				return p.id === openCompare && p.preview;
+			} )[ 0 ];
+			if ( open ) {
+				main.appendChild( comparePanel( open ) );
+			} else {
+				openCompare = null;
+			}
 			main.appendChild( removalPanel( data ) );
 			// A page converted but never checked (say, the check was closed half way) gets checked now.
 			if ( ! data.cleaning ) {
@@ -477,8 +485,8 @@
 			} } );
 		}
 		var isChecking = !! checking[ page.id ];
-		var compareButton = h( 'button', { class: 'dp-btn small ghost', type: 'button', text: 'Compare', onclick: function () {
-			compare( page.title, page.url, page.preview, 'publish' === page.wpstatus );
+		var compareButton = h( 'button', { class: 'dp-btn small ghost', type: 'button', text: 'Compare', 'aria-expanded': String( openCompare === page.id ), onclick: function () {
+			showCompare( page );
 		} } );
 		var checkNote = null;
 		if ( 'elementor' === page.status ) {
@@ -502,7 +510,8 @@
 			actions.appendChild( act( 'Back to Elementor', 'back', '"' + page.title + '" is back on Elementor.', false ) );
 		}
 		var other = Object.keys( page.other || {} );
-		return h( 'article', { class: 'dp-mcard' + ( isChecking ? ' is-checking' : '' ), 'data-page': page.id }, [
+		return h( 'article', { class: 'dp-mcard' + ( isChecking ? ' is-checking' : '' ) + ( openCompare === page.id ? ' is-open' : '' ), 'data-page': page.id }, [
+			thumb( page ),
 			h( 'div', { class: 'dp-card-top' }, [ h( 'h4', { text: page.title || '(no title)' } ), page.front ? h( 'span', { class: 'dp-badge', text: 'Home' } ) : null ] ),
 			h( 'p', { class: 'dp-url', text: page.url.replace( /^https?:\/\//, '' ) } ),
 			h( 'p', { class: 'dp-meta' }, [
@@ -521,6 +530,271 @@
 			checkNote,
 			actions
 		] );
+	}
+
+	/** The page as visitors see it now (a draft-only page is shown through WordPress's own preview). */
+	function liveUrlOf( page ) {
+		return 'publish' === page.wpstatus ? page.url : page.url + ( page.url.indexOf( '?' ) > -1 ? '&' : '?' ) + 'preview=true';
+	}
+
+	function framedUrl( url ) {
+		return url + ( url.indexOf( '?' ) > -1 ? '&' : '?' ) + 'deft_frame=1';
+	}
+
+	/* ---------- Thumbnails: each row shows its page, loaded only when it scrolls into view ---------- */
+
+	var THUMB_WIDTH = 1280;
+	var thumbWatch = 'IntersectionObserver' in window ? new IntersectionObserver( function ( entries ) {
+		entries.forEach( function ( entry ) {
+			if ( entry.isIntersecting ) {
+				thumbWatch.unobserve( entry.target );
+				loadThumb( entry.target );
+			}
+		} );
+	}, { rootMargin: '200px' } ) : null;
+
+	function thumb( page ) {
+		var box = h( 'div', { class: 'dp-thumb', 'aria-hidden': 'true' } );
+		box.dataset.src = framedUrl( 'live' === page.status ? page.url : liveUrlOf( page ) );
+		// Measured after it's on screen, so the scale fits the lane.
+		requestAnimationFrame( function () {
+			if ( thumbWatch ) {
+				thumbWatch.observe( box );
+			} else {
+				loadThumb( box );
+			}
+		} );
+		return box;
+	}
+
+	function loadThumb( box ) {
+		var scale = ( box.clientWidth || 240 ) / THUMB_WIDTH;
+		var frame = h( 'iframe', { tabindex: '-1', title: '', src: box.dataset.src, scrolling: 'no' } );
+		frame.style.width = THUMB_WIDTH + 'px';
+		frame.style.height = Math.round( box.clientHeight / scale ) + 'px';
+		frame.style.transform = 'scale(' + scale + ')';
+		frame.addEventListener( 'load', function () {
+			box.classList.add( 'is-loaded' );
+		} );
+		box.appendChild( frame );
+	}
+
+	/* ---------- Compare, inline: live page and draft side by side, with what differs outlined ---------- */
+
+	var openCompare = null;
+	var COMPARE_SIZES = [ [ 'phone', 'Phone', 390 ], [ 'tablet', 'Tablet', 820 ], [ 'desktop', 'Desktop', 1440 ] ];
+
+	function showCompare( page ) {
+		openCompare = openCompare === page.id ? null : page.id;
+		document.querySelectorAll( '.dp-mcard' ).forEach( function ( card ) {
+			var on = String( openCompare ) === card.getAttribute( 'data-page' );
+			card.classList.toggle( 'is-open', on );
+			card.querySelectorAll( 'button' ).forEach( function ( b ) {
+				if ( 'Compare' === b.textContent ) {
+					b.setAttribute( 'aria-expanded', String( on ) );
+				}
+			} );
+		} );
+		var old = document.querySelector( '.dp-inline' );
+		if ( old ) {
+			old.remove();
+		}
+		if ( ! openCompare ) {
+			return;
+		}
+		var panel = comparePanel( page );
+		var lanes = document.querySelector( '.dp-board' );
+		lanes.parentNode.insertBefore( panel, lanes.nextSibling );
+		panel.scrollIntoView( { behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth', block: 'start' } );
+	}
+
+	function comparePanel( page ) {
+		var check = page.check || {};
+		var areas = check.areas || {};
+		// Open at the first width that differs, so the outline is the first thing seen.
+		var order = window.innerWidth < 700 ? COMPARE_SIZES : COMPARE_SIZES.slice().reverse();
+		var size = order.filter( function ( x ) {
+			return ( check.sizes && ( check.sizes[ x[ 0 ] ] || [] ).length );
+		} )[ 0 ] || order[ 0 ];
+		var panel = h( 'section', { class: 'dp-inline', 'aria-label': 'Compare ' + page.title } );
+		var segs = h( 'div', { class: 'dp-segs', role: 'group', 'aria-label': 'Width' } );
+		var list = h( 'ol', { class: 'dp-diffs' } );
+		var panes = h( 'div', { class: 'dp-panes' } );
+		var frames = [];
+
+		function pane( label, url, side ) {
+			var frame = h( 'iframe', { title: label, src: framedUrl( url ) } );
+			frame.dataset.side = side;
+			var box = h( 'div', { class: 'dp-pane' }, [ h( 'p', { class: 'dp-pane-label', text: label } ), h( 'div', { class: 'dp-pane-view' }, [ frame ] ) ] );
+			frames.push( frame );
+			frame.addEventListener( 'load', function () {
+				outline( frame );
+				syncScroll( frame );
+			} );
+			return box;
+		}
+
+		function scaleFrames() {
+			frames.forEach( function ( frame ) {
+				var view = frame.parentNode;
+				var scale = Math.min( 1, view.clientWidth / size[ 2 ] );
+				frame.style.width = size[ 2 ] + 'px';
+				frame.style.height = Math.round( view.clientHeight / scale ) + 'px';
+				frame.style.transform = 'scale(' + scale + ')';
+				// A phone-width page sits in the middle of a wider pane.
+				frame.style.left = Math.max( 0, Math.round( ( view.clientWidth - size[ 2 ] * scale ) / 2 ) ) + 'px';
+			} );
+		}
+
+		// Something missing from the draft is outlined where it was on the live page; everything else where it is
+		// in the draft. A change in height is marked on both.
+		function sideOf( label ) {
+			if ( /^Missing/.test( label ) ) {
+				return 'live';
+			}
+			return /^(Taller|Shorter)$/.test( label ) ? 'both' : 'draft';
+		}
+
+		function outline( frame ) {
+			var doc;
+			try {
+				doc = frame.contentDocument;
+			} catch ( err ) {
+				return;
+			}
+			if ( ! doc || ! doc.documentElement ) {
+				return;
+			}
+			[].slice.call( doc.querySelectorAll( '[data-deft-outline]' ) ).forEach( function ( el ) {
+				el.remove();
+			} );
+			( areas[ size[ 0 ] ] || [] ).forEach( function ( box, i ) {
+				var side = sideOf( box.label || '' );
+				if ( 'both' !== side && side !== frame.dataset.side ) {
+					return;
+				}
+				var mark = doc.createElement( 'div' );
+				mark.setAttribute( 'data-deft-outline', '' );
+				mark.style.cssText = 'position:absolute;left:4px;right:4px;top:' + box.top + 'px;height:' + box.height + 'px;border:3px solid #b3261e;border-radius:10px;background:rgba(179,38,30,.07);pointer-events:none;z-index:2147483647;box-sizing:border-box';
+				var tag = doc.createElement( 'span' );
+				tag.textContent = ( i + 1 ) + ' · ' + ( box.label || 'Differs' );
+				tag.style.cssText = 'position:absolute;top:-3px;left:-3px;background:#b3261e;color:#fff;font:600 13px/1 -apple-system,BlinkMacSystemFont,sans-serif;padding:6px 9px;border-radius:10px 0 10px 0';
+				mark.appendChild( tag );
+				doc.documentElement.appendChild( mark );
+			} );
+		}
+
+		// Scroll both pages together, so the same part of the page is always side by side.
+		function syncScroll( frame ) {
+			try {
+				frame.contentWindow.addEventListener( 'scroll', function () {
+					var y = frame.contentWindow.scrollY;
+					frames.forEach( function ( other ) {
+						if ( other !== frame && other.contentWindow && Math.abs( other.contentWindow.scrollY - y ) > 1 ) {
+							other.contentWindow.scrollTo( 0, y );
+						}
+					} );
+				}, { passive: true } );
+			} catch ( err ) {}
+		}
+
+		function scrollTo( top ) {
+			frames.forEach( function ( frame ) {
+				try {
+					frame.contentWindow.scrollTo( { top: Math.max( 0, top - 60 ), behavior: 'smooth' } );
+				} catch ( err ) {}
+			} );
+		}
+
+		function drawList() {
+			list.innerHTML = '';
+			var issues = ( check.sizes && check.sizes[ size[ 0 ] ] ) || [];
+			var boxes = areas[ size[ 0 ] ] || [];
+			if ( ! page.check ) {
+				list.appendChild( h( 'li', { class: 'dp-diff-none', text: 'Not checked yet. Run the check to outline what differs.' } ) );
+			} else if ( ! issues.length ) {
+				list.appendChild( h( 'li', { class: 'dp-diff-none', text: 'Nothing differs at ' + size[ 1 ].toLowerCase() + ' width.' } ) );
+			}
+			issues.forEach( function ( issue ) {
+				// An issue's outline is the one with its label, in order.
+				var box = boxes.filter( function ( b ) {
+					return ! b.used && issueLabel( issue ) === b.label;
+				} )[ 0 ];
+				if ( box ) {
+					box.used = true;
+				}
+				var n = box ? boxes.indexOf( box ) + 1 : null;
+				list.appendChild( h( 'li', {}, [ box ? h( 'button', { type: 'button', class: 'dp-diff', onclick: function () {
+					scrollTo( box.top );
+				} }, [ h( 'span', { class: 'dp-diff-n', text: String( n ) } ), issue ] ) : h( 'span', { class: 'dp-diff plain', text: issue } ) ] ) );
+			} );
+			boxes.forEach( function ( b ) {
+				delete b.used;
+			} );
+		}
+
+		COMPARE_SIZES.forEach( function ( x ) {
+			segs.appendChild( h( 'button', { type: 'button', class: 'dp-seg' + ( x === size ? ' on' : '' ), 'aria-pressed': String( x === size ), text: x[ 1 ], onclick: function ( e ) {
+				size = x;
+				segs.querySelectorAll( 'button' ).forEach( function ( b ) {
+					b.classList.toggle( 'on', b === e.target );
+					b.setAttribute( 'aria-pressed', String( b === e.target ) );
+				} );
+				scaleFrames();
+				frames.forEach( outline );
+				drawList();
+			} } ) );
+		} );
+
+		panes.appendChild( pane( 'publish' === page.wpstatus ? 'Elementor · live now' : 'Elementor · not published yet', liveUrlOf( page ), 'live' ) );
+		panes.appendChild( pane( 'Deft draft', page.preview, 'draft' ) );
+		panel.appendChild( h( 'header', { class: 'dp-inline-top' }, [
+			h( 'div', {}, [ h( 'p', { class: 'dp-eyebrow', text: 'Compare' } ), h( 'h3', { class: 'dp-title', text: page.title || '(no title)' } ) ] ),
+			segs,
+			h( 'button', { type: 'button', class: 'dp-btn small ghost', text: 'Full screen', onclick: function () {
+				compare( page.title, page.url, page.preview, 'publish' === page.wpstatus );
+			} } ),
+			h( 'button', { type: 'button', class: 'dp-btn small', text: 'Close', onclick: function () {
+				showCompare( page );
+			} } )
+		] ) );
+		panel.appendChild( h( 'div', { class: 'dp-inline-body' }, [ list, panes ] ) );
+		drawList();
+		requestAnimationFrame( scaleFrames );
+		window.addEventListener( 'resize', function onResize() {
+			if ( ! panel.isConnected ) {
+				window.removeEventListener( 'resize', onResize );
+				return;
+			}
+			scaleFrames();
+		} );
+		return panel;
+	}
+
+	/** The outline label for one difference sentence (they're written in differences()). */
+	function issueLabel( issue ) {
+		if ( /^The draft is \d+ px taller/.test( issue ) ) {
+			return 'Taller';
+		}
+		if ( /^The draft is \d+ px shorter/.test( issue ) ) {
+			return 'Shorter';
+		}
+		if ( /is missing from the draft\.$/.test( issue ) ) {
+			return 'Missing image';
+		}
+		if ( /^The draft shows an extra image/.test( issue ) ) {
+			return 'Extra image';
+		}
+		if ( /px wide instead of/.test( issue ) ) {
+			return 'Resized image';
+		}
+		if ( /^The link to .* is missing\.$/.test( issue ) ) {
+			return 'Missing link';
+		}
+		if ( /^The heading /.test( issue ) ) {
+			return 'Heading moved';
+		}
+		return '';
 	}
 
 	function checkSummary( page, isChecking ) {
@@ -561,20 +835,22 @@
 		}
 		checking[ page.id ] = 'Checking at phone, tablet and desktop…';
 		redrawCard( page );
-		var liveUrl = 'publish' === page.wpstatus ? page.url : page.url + ( page.url.indexOf( '?' ) > -1 ? '&' : '?' ) + 'preview=true';
-		var sizes = {};
+		var liveUrl = liveUrlOf( page );
+		var sizes = {}, areas = {};
 		var chain = Promise.resolve();
 		SIZES.forEach( function ( size ) {
 			chain = chain.then( function () {
 				checking[ page.id ] = 'Checking at ' + size[ 2 ] + ' width…';
 				redrawCard( page );
 				return Promise.all( [ render( liveUrl, size[ 1 ] ), render( page.preview, size[ 1 ] ) ] ).then( function ( pair ) {
-					sizes[ size[ 0 ] ] = differences( pair[ 0 ], pair[ 1 ] );
+					var found = differences( pair[ 0 ], pair[ 1 ] );
+					sizes[ size[ 0 ] ] = found.issues;
+					areas[ size[ 0 ] ] = found.areas;
 				} );
 			} );
 		} );
 		chain.then( function () {
-			return api( '/migration/' + page.id + '/check', { method: 'POST', body: { sizes: sizes } } );
+			return api( '/migration/' + page.id + '/check', { method: 'POST', body: { sizes: sizes, areas: areas } } );
 		} ).then( function ( r ) {
 			delete checking[ page.id ];
 			notice( r.ok ? '"' + page.title + '" matches the live page. Ready to go live.' : '"' + page.title + '" differs from the live page. Have a look before it goes live.', r.ok ? 'good' : 'warn' );
@@ -682,31 +958,44 @@
 		}
 		var images = [].slice.call( doc.querySelectorAll( 'img' ) ).filter( shown ).map( function ( img ) {
 			var box = img.getBoundingClientRect();
-			return { file: file( img.currentSrc || img.src ), w: Math.round( box.width ), top: Math.round( box.top + scrollY ), loaded: img.complete && img.naturalWidth > 0 };
+			return { file: file( img.currentSrc || img.src ), w: Math.round( box.width ), h: Math.round( box.height ), top: Math.round( box.top + scrollY ), loaded: img.complete && img.naturalWidth > 0 };
 		} );
 		var heads = [].slice.call( doc.querySelectorAll( 'h1, h2, h3' ) ).filter( shown ).map( function ( el ) {
 			return { text: el.textContent.replace( /\s+/g, ' ' ).trim().slice( 0, 60 ), top: Math.round( el.getBoundingClientRect().top + scrollY ) };
 		} );
+		var linkTops = {};
 		var links = [].slice.call( doc.querySelectorAll( 'a[href]' ) ).filter( function ( a ) {
 			return shown( a ) && ! /^(javascript:|#$)/.test( a.getAttribute( 'href' ) );
 		} ).map( function ( a ) {
-			return href( a.getAttribute( 'href' ) );
+			var url = href( a.getAttribute( 'href' ) );
+			if ( ! ( url in linkTops ) ) {
+				linkTops[ url ] = Math.round( a.getBoundingClientRect().top + scrollY );
+			}
+			return url;
 		} );
 		return {
 			height: doc.documentElement.scrollHeight,
 			words: ( doc.body.innerText || '' ).toLowerCase().replace( /[^\p{L}\p{N}@.'’-]+/gu, ' ' ).split( ' ' ).filter( Boolean ),
 			images: images,
 			heads: heads,
-			links: links
+			links: links,
+			linkTops: linkTops
 		};
 	}
 
-	/** What changed between the live page (a) and the draft (b), as short sentences. */
+	/**
+	 * What changed between the live page (a) and the draft (b): short sentences, and the part of the page each is in
+	 * (areas, in pixels down the page) so Compare can outline it.
+	 */
 	function differences( a, b ) {
-		var out = [];
+		var out = [], areas = [];
+		function area( top, height, label ) {
+			areas.push( { top: Math.max( 0, Math.round( top ) - 16 ), height: Math.round( height ) + 32, label: label } );
+		}
 		var dh = b.height - a.height;
 		if ( Math.abs( dh ) > Math.max( 60, a.height * 0.04 ) ) {
 			out.push( 'The draft is ' + Math.abs( dh ) + ' px ' + ( dh > 0 ? 'taller' : 'shorter' ) + ' (' + a.height + ' px live).' );
+			area( Math.min( a.height, b.height ) - 240, Math.abs( dh ) + 240, dh > 0 ? 'Taller' : 'Shorter' );
 		}
 		var missing = minus( a.words, b.words ), extra = minus( b.words, a.words );
 		var limit = Math.max( 3, Math.round( a.words.length * 0.01 ) );
@@ -722,11 +1011,20 @@
 		var aFiles = a.images.map( function ( i ) {
 			return i.file;
 		} );
+		function at( list, name ) {
+			return list.filter( function ( i ) {
+				return i.file === name;
+			} )[ 0 ];
+		}
 		minus( aFiles, bFiles ).slice( 0, 3 ).forEach( function ( name ) {
 			out.push( 'Image ' + name + ' is missing from the draft.' );
+			var img = at( a.images, name );
+			area( img.top, img.h, 'Missing image' );
 		} );
 		minus( bFiles, aFiles ).slice( 0, 2 ).forEach( function ( name ) {
 			out.push( 'The draft shows an extra image, ' + name + '.' );
+			var img = at( b.images, name );
+			area( img.top, img.h, 'Extra image' );
 		} );
 		// Same image, same place in the page: the second photo.jpg on the live page against the second one in the draft.
 		var resized = 0, seen = {};
@@ -738,10 +1036,12 @@
 			if ( match && img.loaded && match.loaded && Math.abs( match.w - img.w ) > Math.max( 24, img.w * 0.15 ) && resized < 2 ) {
 				resized++;
 				out.push( 'Image ' + img.file + ' shows ' + match.w + ' px wide instead of ' + img.w + ' px.' );
+				area( match.top, match.h, 'Resized image' );
 			}
 		} );
 		minus( unique( a.links ), unique( b.links ) ).slice( 0, 3 ).forEach( function ( url ) {
 			out.push( 'The link to ' + url + ' is missing.' );
+			area( a.linkTops[ url ] || 0, 40, 'Missing link' );
 		} );
 		var moved = 0;
 		a.heads.forEach( function ( head ) {
@@ -751,9 +1051,10 @@
 			if ( match && Math.abs( match.top - head.top ) > Math.max( 80, a.height * 0.06 ) && moved < 2 ) {
 				moved++;
 				out.push( 'The heading "' + head.text + '" sits ' + Math.abs( match.top - head.top ) + ' px ' + ( match.top > head.top ? 'lower' : 'higher' ) + '.' );
+				area( match.top, 80, 'Heading moved' );
 			}
 		} );
-		return out.slice( 0, 8 );
+		return { issues: out.slice( 0, 8 ), areas: areas.slice( 0, 8 ) };
 	}
 
 	/** Items of a that b doesn't have, counting repeats. */
