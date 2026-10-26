@@ -1608,71 +1608,15 @@ function deft_agent_tool_update_option( $args ) {
 /* ---------- Tools: caches and log ---------- */
 
 function deft_agent_cache_plugins() {
-	$found = array();
-	$known = array(
-		'LiteSpeed Cache'   => defined( 'LSCWP_V' ),
-		'WP Rocket'         => function_exists( 'rocket_clean_domain' ),
-		'W3 Total Cache'    => function_exists( 'w3tc_flush_all' ),
-		'WP Super Cache'    => function_exists( 'wp_cache_clear_cache' ),
-		'SiteGround'        => function_exists( 'sg_cachepress_purge_cache' ),
-		'Autoptimize'       => class_exists( 'autoptimizeCache' ),
-		'WP Fastest Cache'  => class_exists( 'WpFastestCache' ),
-		'Hostinger'         => class_exists( '\Hostinger\Cache\Purge' ) || defined( 'HOSTINGER_VERSION' ),
-		'Object cache'      => wp_using_ext_object_cache(),
-	);
-	foreach ( $known as $name => $present ) {
-		if ( $present ) {
-			$found[] = $name;
-		}
-	}
-	return $found;
+	return deft_core_cache_plugins();
 }
 
 function deft_agent_clear_elementor() {
-	if ( class_exists( '\Elementor\Plugin' ) && isset( \Elementor\Plugin::$instance->files_manager ) ) {
-		\Elementor\Plugin::$instance->files_manager->clear_cache();
-		return true;
-	}
-	return false;
+	return deft_core_clear_elementor();
 }
 
 function deft_agent_tool_flush_caches() {
-	$done = array();
-	wp_cache_flush();
-	$done[] = 'WordPress object cache';
-	if ( deft_agent_clear_elementor() ) {
-		$done[] = 'Elementor CSS';
-	}
-	if ( defined( 'LSCWP_V' ) ) {
-		do_action( 'litespeed_purge_all' );
-		$done[] = 'LiteSpeed Cache';
-	}
-	if ( function_exists( 'rocket_clean_domain' ) ) {
-		rocket_clean_domain();
-		$done[] = 'WP Rocket';
-	}
-	if ( function_exists( 'w3tc_flush_all' ) ) {
-		w3tc_flush_all();
-		$done[] = 'W3 Total Cache';
-	}
-	if ( function_exists( 'wp_cache_clear_cache' ) ) {
-		wp_cache_clear_cache();
-		$done[] = 'WP Super Cache';
-	}
-	if ( function_exists( 'sg_cachepress_purge_cache' ) ) {
-		sg_cachepress_purge_cache();
-		$done[] = 'SiteGround';
-	}
-	if ( class_exists( 'autoptimizeCache' ) && method_exists( 'autoptimizeCache', 'clearall' ) ) {
-		autoptimizeCache::clearall();
-		$done[] = 'Autoptimize';
-	}
-	if ( class_exists( 'WpFastestCache' ) && isset( $GLOBALS['wp_fastest_cache'] ) && method_exists( $GLOBALS['wp_fastest_cache'], 'deleteCache' ) ) {
-		$GLOBALS['wp_fastest_cache']->deleteCache( true );
-		$done[] = 'WP Fastest Cache';
-	}
-	do_action( 'deft_agent_flush_caches' ); // Hosts with their own cache can hook in here.
-	return array( 'cleared' => $done );
+	return array( 'cleared' => deft_core_flush_caches() );
 }
 
 function deft_agent_tool_agent_log( $args ) {

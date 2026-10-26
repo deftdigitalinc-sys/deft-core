@@ -19,6 +19,8 @@ define( 'DEFT_CORE_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once DEFT_CORE_DIR . 'includes/settings.php';
 require_once DEFT_CORE_DIR . 'includes/geo.php';
+require_once DEFT_CORE_DIR . 'includes/cache.php';
+require_once DEFT_CORE_DIR . 'includes/html.php';
 require_once DEFT_CORE_DIR . 'modules/forms.php';
 require_once DEFT_CORE_DIR . 'modules/central.php';
 require_once DEFT_CORE_DIR . 'modules/tracking.php';
@@ -26,6 +28,7 @@ require_once DEFT_CORE_DIR . 'modules/reports.php';
 require_once DEFT_CORE_DIR . 'modules/dashboard.php';
 require_once DEFT_CORE_DIR . 'modules/ga-history.php';
 require_once DEFT_CORE_DIR . 'modules/site.php';
+require_once DEFT_CORE_DIR . 'modules/pages.php';
 require_once DEFT_CORE_DIR . 'modules/agent.php';
 
 register_activation_hook( __FILE__, 'deft_core_activate' );
