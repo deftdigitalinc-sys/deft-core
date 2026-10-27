@@ -938,6 +938,25 @@ function deft_sec_check_users( $add ) {
 	if ( $injected ) {
 		$add( 'bad', 'injected_posts', sprintf( '%d published posts or pages were written straight into the database (no real author, or a blank edit date). Injected spam looks like this.', $injected ) );
 	}
+	// Database triggers and scheduled events: WordPress uses neither, and the October 2026 toolkit left an
+	// after_insert_comment trigger on 25 sites so spam came back after the clean-up.
+	$triggers = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = %s', DB_NAME ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$events   = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT EVENT_NAME FROM information_schema.EVENTS WHERE EVENT_SCHEMA = %s', DB_NAME ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$out['db_triggers'] = array_merge( $triggers, $events );
+	if ( $out['db_triggers'] ) {
+		$add( 'bad', 'db_trigger', sprintf( 'Database triggers or events (WordPress uses none): %s. They re-insert spam after a clean-up; drop them.', implode( ', ', array_slice( $out['db_triggers'], 0, 8 ) ) ) );
+	}
+	// Code kept in the database by snippet plugins runs on every page, and stays even after the plugin is removed.
+	$stored = 0;
+	$table  = $wpdb->prefix . 'snippets';
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$stored += (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE active = 1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+	$stored += (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type IN ('wpcode', 'wp-code-snippet', 'hfcm_snippet') AND post_status = 'publish'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$out['stored_code'] = $stored;
+	if ( $stored ) {
+		$add( 'warn', 'stored_code', sprintf( '%d active code snippets are stored in the database. Each runs on every page; check what they do, then move anything needed into Deft Core or the theme.', $stored ) );
+	}
 	$logins = (array) $wpdb->get_col( "SELECT user_login FROM {$wpdb->users}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$out['bad_logins'] = array_values( preg_grep( DEFT_SEC_BAD_LOGIN, $logins ) );
 	if ( $out['bad_logins'] ) {

@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
 const DEFT_WATCH_SPAM = '/\b(casino|baccarat|roulette|blackjack|poker|slots?\s*(online|gacor|machine)|gacor|togel|judi|sportsbook|betting|bet365|viagra|cialis|levitra|payday\s+loans?|escort|porn|xxx|onlyfans|replica\s+(watch|bag)|essay\s+writ|crypto\s+casino|no\s+deposit\s+bonus)\b/i';
 
 /** Findings that mean the site was hacked. They are fixed by the clean-up, so Central never lets them be muted. */
-const DEFT_WATCH_HACK = array( 'spam_posts', 'uploads_php', 'open_registration', 'user_ini_prepend', 'spam_sitemap', 'core_modified', 'unknown_mu_plugin', 'hidden_admin', 'suspicious_user_meta', 'ioc_username', 'hidden_plugin', 'root_php', 'injected_posts' );
+const DEFT_WATCH_HACK = array( 'spam_posts', 'uploads_php', 'open_registration', 'user_ini_prepend', 'spam_sitemap', 'core_modified', 'unknown_mu_plugin', 'hidden_admin', 'suspicious_user_meta', 'ioc_username', 'hidden_plugin', 'root_php', 'injected_posts', 'db_trigger' );
 
 /** A short plain title for each finding, as the Site watch board shows it. */
 const DEFT_WATCH_TITLES = array(
@@ -44,6 +44,8 @@ const DEFT_WATCH_TITLES = array(
 	'hidden_plugin'        => 'Hidden plugin',
 	'root_php'             => 'Unknown PHP in the web root',
 	'injected_posts'       => 'Posts written straight into the database',
+	'db_trigger'           => 'Database trigger',
+	'stored_code'          => 'Code stored in the database',
 	'plugin_modified'      => 'Plugin files were changed',
 	'root_archive'         => 'Backup files anyone can download',
 	'files_changed'        => 'Code files changed',
