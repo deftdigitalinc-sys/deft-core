@@ -232,6 +232,14 @@ check( 'totp: a code from two steps ago does not', false === deft_sec_totp_match
 check( 'totp: spaces in the code are fine', 1 === deft_sec_totp_match( $b32, '287 082', 59 ) );
 check( 'totp: wrong code refused', false === deft_sec_totp_match( $b32, '000000', 59 ) );
 
+// ---- Toolkit file names (functions_bak.php, empty PHP) ----
+$GLOBALS['opts'] = array();
+put( 'wp-content/themes/t/functions_bak.php', '<?php // copy' );
+put( 'wp-content/plugins/gone/gone.php', '' );
+put( 'wp-content/themes/t/functions.php', '<?php // fine' );
+$odd = deft_sec_odd_files( WP_CONTENT_DIR );
+check( 'toolkit: functions_bak.php and the empty plugin main found', 2 === count( $odd ) );
+
 exec( 'rm -rf ' . escapeshellarg( $root ) );
 echo $fails ? "\n$fails failed\n" : "\nall passed\n";
 exit( $fails ? 1 : 0 );

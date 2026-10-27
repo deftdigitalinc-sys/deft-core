@@ -978,6 +978,26 @@ function deft_sec_check_users( $add ) {
 	return $out;
 }
 
+/** *_bak.php copies and empty PHP files under a folder (relative paths, at most 50). */
+function deft_sec_odd_files( $dir ) {
+	$odd = array();
+	foreach ( deft_sec_walk( $dir, 120000, true ) as $rel => $path ) {
+		$name = basename( $path );
+		if ( deft_sec_allowed( $rel ) || ! preg_match( '/\.php[0-9]?$/i', $name ) ) {
+			continue;
+		}
+		if ( preg_match( '/([_.-]bak|[_.-]old|[_.-]backup|\.bk)\.php[0-9]?$/i', $name ) ) {
+			$odd[] = $rel;
+		} elseif ( 0 === (int) @filesize( $path ) && 'index.php' !== $name ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			$odd[] = $rel . ' (0 bytes)';
+		}
+		if ( count( $odd ) >= 50 ) {
+			break;
+		}
+	}
+	return $odd;
+}
+
 /** The whole file check. Takes a few seconds; runs from WP-Cron, or when staff press Check now. */
 function deft_sec_run_scan() {
 	if ( function_exists( 'set_time_limit' ) ) {
@@ -1008,6 +1028,14 @@ function deft_sec_run_scan() {
 	$loose = deft_sec_check_mu_dropins( $add );
 	$plug  = deft_sec_check_plugins( $state, $baseline, $add, $deadline );
 	$users = deft_sec_check_users( $add );
+
+	// Names and sizes the October 2026 toolkit used everywhere in wp-content: functions_bak.php (16 sites in 23 minutes on
+	// 2026-07-09) and other *_bak.php copies, and 0-byte PHP files (gutted plugin mains it left behind). Names only, no
+	// reading, so this stays cheap on big sites.
+	$odd = deft_sec_odd_files( WP_CONTENT_DIR );
+	if ( $odd ) {
+		$add( 'bad', 'backdoor_file', sprintf( '%d PHP files look like the October 2026 toolkit\'s (*_bak.php copies or empty PHP files), for example %s.', count( $odd ), implode( ', ', array_slice( $odd, 0, 5 ) ) ) );
+	}
 
 	// The theme (and its parent), must-use plugins and the web root's config files against the baseline.
 	$changed = $plug['changed'];
