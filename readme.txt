@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.5
+Stable tag: 0.10.0
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,11 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.10.0 =
+* Site security (Settings > Deft > Site security), after the October 2026 hacks. On by default: the file editor off, PHP blocked in uploads, archives, backups, config files and folder listings refused from the web root (checked with a home page request and taken back out if the site stops loading), XML-RPC off unless Jetpack is active, application passwords off, a lockout after 5 wrong logins (skipped while Wordfence runs), usernames hidden from visitors, and nosniff and referrer headers. Off by default: HSTS and plugin auto-updates. Turning the plugin off takes the .htaccess blocks back out.
+* Logins: two-factor codes from an authenticator app (TOTP), required for administrators by default (they are sent to set it up, nobody is locked out; users with Wordfence two-factor are left to Wordfence; DEFT_CORE_NO_2FA in wp-config.php turns it off in an emergency). An "Ask for new passwords" button logs administrators (or everyone) out and sends each a reset link on their next login. New passwords that are in Have I Been Pwned's list are refused (only 5 characters of the SHA-1 leave the site).
+* Nightly file check: WordPress core and wordpress.org plugins against the official checksums, Deft Core against data/manifest.json, premium plugins, the theme, must-use plugins and the web root's config files against a baseline. Also looks for auto_prepend_file in .user.ini, unknown PHP, spam sitemaps and archives in the web root, unknown must-use plugins and drop-ins, plugins hidden from the admin list, hidden administrators, malware usermeta keys and usernames, application passwords, admins without two-factor (where Wordfence Login Security runs) and plugins Deft doesn't run (file managers, MainWP, code snippets, temporary logins). Findings go into Site watch's health report and new problems are emailed to the alert address. Nothing is deleted or moved.
 
 = 0.9.5 =
 * Connect from Deft Central: Central's Connect button uploads wp-content/mu-plugins/deft-central.php, which defines DEFT_CORE_CENTRAL_URL, DEFT_CORE_CENTRAL_SITE_ID and DEFT_CORE_CENTRAL_SECRET. When it's there the site is connected with nothing to paste: leads go to Central, Site watch's inside checks work, and Settings > Deft shows "Set by Deft Central". The file survives plugin updates and keeps the secret out of the database. Delete it to disconnect. The endpoint and site ID can also be set by hand in wp-config.php, like the secret.

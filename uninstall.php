@@ -33,6 +33,14 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}deft_agent_log" ); // phpcs:i
 delete_option( 'deft_agent_tokens' );
 delete_option( 'deft_agent_db' );
 delete_option( 'deft_watch_mail' );
+foreach ( array( 'deft_sec_scan', 'deft_sec_baseline', 'deft_sec_baseline_at', 'deft_sec_applied', 'deft_sec_apply_result', 'deft_sec_lockouts', 'deft_sec_root_error', 'deft_sec_force_reset' ) as $deft_option ) {
+	delete_option( $deft_option );
+}
+// Two-factor secrets go with the plugin, so nobody is left asked for a code no form can take.
+delete_metadata( 'user', 0, 'deft_2fa_secret', '', true );
+delete_metadata( 'user', 0, 'deft_2fa_on', '', true );
+delete_metadata( 'user', 0, 'deft_2fa_last', '', true );
+delete_metadata( 'user', 0, 'deft_must_reset', '', true );
 delete_option( 'deft_migrate_removal' );
 delete_transient( 'deft_migrate_hack_signs' );
 $deft_backup_key = get_option( 'deft_agent_backup_key' );
