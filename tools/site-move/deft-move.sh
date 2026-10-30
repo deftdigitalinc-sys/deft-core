@@ -85,10 +85,21 @@ apply() {
   [ "$before" = 200 ] || { say "SKIP $d wp-login.php is $before before we start"; return; }
 
   local bk="$HOME_DIR/backups/$d-$RUN"; mkdir -p "$bk"; chmod 700 "$bk"
-  # Streamed to gzip: writing the dump straight to a file fails silently on Hostinger, stdout works.
+  # mysqldump is run directly: "wp db export" exits 255 without a word on Hostinger (its PHP can't start mysqldump).
+  # The login goes in a private options file, so the password never shows in the process list.
   # --no-tablespaces: Hostinger's database users lack the PROCESS privilege newer mysqldump asks for.
-  ( set -o pipefail; wpc db export - --no-tablespaces --single-transaction | gzip > "$bk/db.sql.gz" )
-  local rc=$? size; size=$(stat -c %s "$bk/db.sql.gz" 2>/dev/null || echo 0)
+  local cnf="$bk/my.cnf" dbh dbport='' dbsock=''
+  dbh=$(wpc config get DB_HOST)
+  case "$dbh" in
+    *:/*) dbsock=${dbh#*:}; dbh=${dbh%%:*} ;;
+    *:*)  dbport=${dbh#*:}; dbh=${dbh%%:*} ;;
+  esac
+  ( umask 077; esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
+    { printf '[client]\nuser="%s"\npassword="%s"\nhost="%s"\n' "$(wpc config get DB_USER | esc)" "$(wpc config get DB_PASSWORD | esc)" "${dbh:-localhost}"
+    [ -n "$dbport" ] && printf 'port=%s\n' "$dbport"; [ -n "$dbsock" ] && printf 'socket="%s"\n' "$dbsock"; true; } > "$cnf" )
+  ( set -o pipefail; mysqldump --defaults-extra-file="$cnf" --no-tablespaces --single-transaction --default-character-set=utf8mb4 "$(wpc config get DB_NAME)" 2>>"$LOG" | gzip > "$bk/db.sql.gz" )
+  local rc=$?; rm -f "$cnf"
+  local size; size=$(stat -c %s "$bk/db.sql.gz" 2>/dev/null || echo 0)
   if [ $rc != 0 ] || [ "$size" -lt 1000 ] || ! zcat "$bk/db.sql.gz" | tail -n 1 | grep -q 'Dump completed'; then
     say "STOP $d database backup failed (exit $rc, $size bytes):"; tail -n 3 "$LOG" | sed 's/^/  /'; return
   fi
