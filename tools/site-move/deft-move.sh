@@ -85,7 +85,11 @@ apply() {
   [ "$before" = 200 ] || { say "SKIP $d wp-login.php is $before before we start"; return; }
 
   local bk="$HOME_DIR/backups/$d-$RUN"; mkdir -p "$bk"; chmod 700 "$bk"
-  wpc db export "$bk/db.sql" --quiet && gzip "$bk/db.sql" && chmod 600 "$bk/db.sql.gz" || { say "STOP $d database backup failed"; return; }
+  # --no-tablespaces: Hostinger's database users lack the PROCESS privilege newer mysqldump asks for.
+  if ! wpc db export "$bk/db.sql" --no-tablespaces --single-transaction --quiet || [ ! -s "$bk/db.sql" ]; then
+    say "STOP $d database backup failed:"; tail -n 3 "$LOG" | sed 's/^/  /'; return
+  fi
+  gzip "$bk/db.sql" && chmod 600 "$bk/db.sql.gz" || { say "STOP $d database backup could not be packed"; return; }
   # Deft Core must be 0.9.6 or later so the extra questions are kept. Update from the client zip if it's older.
   local ver; ver=$(wpc plugin get deft-core --field=version)
   if [ -z "$ver" ] || [ "$(printf '%s\n0.9.6\n' "$ver" | sort -V | head -n1)" != 0.9.6 ]; then
