@@ -87,6 +87,31 @@ switch ( $mode ) {
 				$out( sprintf( 'NEW   %-28s -> a new page "%s"', $page['path'] ?: '/', $page['title'] ) );
 			}
 		}
+		// A Mailchimp for WP signup form: the list address deft_move.py needs (--mailchimp) so the rebuilt form keeps
+		// adding people to the list. Read from the plugin's own settings; the API key is used here and never printed.
+		$mc = get_option( 'mc4wp', array() );
+		if ( ! empty( $mc['api_key'] ) && preg_match( '/-([a-z]+\d+)$/', $mc['api_key'], $dc ) ) {
+			$lists = array();
+			foreach ( get_posts( array( 'post_type' => 'mc4wp-form', 'numberposts' => 20, 'post_status' => 'any' ) ) as $f ) {
+				$set = get_post_meta( $f->ID, '_mc4wp_settings', true );
+				foreach ( (array) ( $set['lists'] ?? array() ) as $l ) {
+					$lists[ $l ] = $f->post_title;
+				}
+			}
+			foreach ( $lists as $list_id => $form_title ) {
+				$r = wp_remote_get( 'https://' . $dc[1] . '.api.mailchimp.com/3.0/lists/' . rawurlencode( $list_id ) . '?fields=name,subscribe_url_long', array(
+					'timeout' => 15,
+					'headers' => array( 'Authorization' => 'Basic ' . base64_encode( 'deft:' . $mc['api_key'] ) ),
+				) );
+				$body = json_decode( (string) wp_remote_retrieve_body( $r ), true );
+				if ( ! empty( $body['subscribe_url_long'] ) ) {
+					$url = preg_replace( '#^http:#', 'https:', str_replace( '/subscribe?', '/subscribe/post?', $body['subscribe_url_long'] ) );
+					$out( sprintf( 'MAILCHIMP list "%s" (form "%s"): --mailchimp "%s"', $body['name'] ?? $list_id, $form_title, $url ) );
+				} else {
+					$out( sprintf( 'MAILCHIMP list %s: could not read it (%s)', $list_id, wp_remote_retrieve_response_code( $r ) ?: 'no answer' ) );
+				}
+			}
+		}
 		$others = get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => 200, 'fields' => 'ids' ) );
 		foreach ( $others as $id ) {
 			if ( empty( $seen[ $id ] ) ) {

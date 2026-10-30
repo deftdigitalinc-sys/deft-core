@@ -19,6 +19,7 @@ What it changes:
 - **Head:** keeps the styles and scripts. Drops the title, canonical, Open Graph and robots tags, because WordPress and Deft Core print those.
 - **Paths:** every local file moves under `/wp-content/uploads/deft-site/`. Links between pages use the WordPress addresses (`/about/`, not `about.html`).
 - **Forms:** each field gets a name from its label. Plugin tokens, old spam traps and file uploads are removed. A honeypot and a status line are added, and `deft-forms.js` posts the form to `/wp-json/deft/v1/forms/contact`. The "preview only" notices from the rebuild are removed.
+- **Mailchimp signups** keep adding people to the list: build with `--mailchimp "<address>"` (the `check` step prints it from the site's Mailchimp for WP settings) and the form sends the lead to Deft Core and the answers to the list under their old field names.
 - **Two files for one page** (`about.html` and `about/index.html`): the folder copy goes up and the report says so.
 - **Review notices** left in the rebuild ("Preview form, sending will be connected…") are taken out.
 - **Uploads:** only plain web files go up. A `.php` file, or anything else a server could run, is refused.

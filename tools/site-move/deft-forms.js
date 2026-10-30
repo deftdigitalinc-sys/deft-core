@@ -32,6 +32,23 @@
     }
   }
 
+  // A form that used to be a Mailchimp signup also sends the answers to the list, under its old field names.
+  // The list's own form address takes a plain POST; the answer can't be read (no-cors), and the lead is safe in Deft Core.
+  function toMailchimp(form, body) {
+    var url = form.getAttribute('data-deft-mailchimp') || '';
+    var m = /^https:\/\/[a-z0-9.-]+\.list-manage\.com\/subscribe\/post\?u=([0-9a-f]+)&id=([0-9a-f]+)$/.exec(url);
+    if (!m || !body.email || body.website_url) return;
+    var map = {};
+    try { map = JSON.parse(form.getAttribute('data-deft-mailchimp-fields') || '{}'); } catch (err) { return; }
+    var p = new URLSearchParams();
+    Object.keys(map).forEach(function (k) {
+      if (body[k] == null || body[k] === '') return;
+      [].concat(body[k]).forEach(function (v) { p.append(map[k], v); });
+    });
+    p.append('b_' + m[1] + '_' + m[2], '');
+    fetch(url, { method: 'POST', mode: 'no-cors', body: p }).catch(function () {});
+  }
+
   // Capture on window runs before any other submit handler on the page (old preview scripts included).
   window.addEventListener('submit', function (e) {
     var form = e.target;
@@ -61,6 +78,7 @@
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (res) {
         if (res && res.ok) {
+          toMailchimp(form, body);
           var p = document.createElement('p');
           p.className = 'form-thanks';
           p.setAttribute('role', 'status');

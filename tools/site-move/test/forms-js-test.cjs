@@ -37,6 +37,20 @@ const page = `<!doctype html><html><head><script>${js}</script></head><body>
   ok(await p.getAttribute('[name=first_name]', 'aria-invalid') === 'true', 'missing name marked');
   ok(await p.$('.form-status a[href="tel:+15615551234"]'), 'phone offered on error');
   ok(!(await p.isDisabled('button')), 'button usable again');
+  // A former Mailchimp signup also posts to the list under its old field names.
+  const mcPage = page.replace('data-deft-form="contact"', 'data-deft-form="contact" data-deft-mailchimp="https://acme.us21.list-manage.com/subscribe/post?u=abc123&amp;id=def456" data-deft-mailchimp-fields=\'{"first_name":"FNAME","email":"EMAIL","rooms":"MMERGE5"}\'')
+    .replace('<input name="address" value="1 Main">', '<input name="address" value="1 Main"><input name="email" value="ana@example.com">');
+  let mc = null;
+  await p.route('https://acme.test/', r => r.fulfill({ contentType: 'text/html', body: mcPage }));
+  await p.route('https://acme.test/wp-json/deft/v1/forms/contact', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, message: 'Thanks' }) }));
+  await p.route('https://acme.us21.list-manage.com/**', r => { mc = r.request().postData(); r.fulfill({ body: 'ok' }); });
+  await p.goto('https://acme.test/');
+  await p.click('button');
+  await p.waitForSelector('.form-thanks');
+  await p.waitForTimeout(300);
+  const q = new URLSearchParams(mc || '');
+  ok(q.get('FNAME') === 'Ana' && q.get('EMAIL') === 'ana@example.com', 'Mailchimp gets the old field names');
+  ok(q.getAll('MMERGE5').length === 2 && q.has('b_abc123_def456'), 'Mailchimp gets the group and its bot field');
   await browser.close();
   console.log(fail ? fail + ' failed' : 'all forms-js checks pass');
   process.exit(fail ? 1 : 0);

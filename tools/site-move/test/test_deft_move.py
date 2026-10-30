@@ -116,6 +116,27 @@ class Convert(Base):
         self.assertTrue(any('shell.php' in w for w in self.warnings))
 
 
+class Mailchimp(Base):
+    def test_signup_keeps_sending_to_the_list(self):
+        self.tmp = tempfile.mkdtemp()
+        src = os.path.join(self.tmp, 'src'); os.makedirs(src)
+        with open(os.path.join(src, 'index.html'), 'w') as fh:
+            fh.write(ABOUT.replace('<input name="FNAME">', '<input name="FNAME"><label><input type="radio" name="MMERGE5" value="Buying"> Buying</label>'))
+        url = 'https://acme.us21.list-manage.com/subscribe/post?u=abc123&id=def456'
+        dest, _, warnings = deft_move.build(src, 'acme.com', os.path.join(self.tmp, 'out'), mailchimp_url=url)
+        with open(os.path.join(dest, 'manifest.json')) as fh:
+            html = json.load(fh)['pages'][0]['html']
+        self.assertIn('data-deft-mailchimp="%s"' % url.replace('&', '&amp;'), html)
+        fields = json.loads(re.search(r"data-deft-mailchimp-fields='([^']+)'", html).group(1))
+        self.assertEqual(fields['first_name'], 'FNAME'); self.assertEqual(fields['email'], 'EMAIL')
+        self.assertIn('MMERGE5', fields.values())
+        self.assertFalse(any('Mailchimp' in w for w in warnings))
+
+    def test_bad_address_refused(self):
+        with self.assertRaises(SystemExit):
+            deft_move.build('/nonexistent', 'acme.com', '/tmp/x', mailchimp_url='https://evil.example/subscribe/post?u=1&id=2')
+
+
 class CallOnly(Base):
     def test_forms_become_call_buttons(self):
         self.build(call_only=True)

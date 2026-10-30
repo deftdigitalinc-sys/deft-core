@@ -285,7 +285,7 @@ def classify(label, field):
     return None
 
 
-def convert_form(form, page_label, report, soup, phone_link, call_only):
+def convert_form(form, page_label, report, soup, phone_link, call_only, mailchimp_url=''):
     form_name = clean_text(form.get('aria-label') or form.get('name') or form.get('data-name') or '')
     where = '%s, form "%s"' % (page_label, form_name or 'unnamed')
 
@@ -306,8 +306,11 @@ def convert_form(form, page_label, report, soup, phone_link, call_only):
     groups_done = set()
     has = lambda k: k in used
 
-    if any(re.match(r'mc4wp|mailchimp|mc-embedded', c) for c in (form.get('class') or [])) or 'list-manage.com' in (form.get('action') or ''):
-        report.warn('%s: was a Mailchimp signup. It now sends a lead to Deft Core instead, so new people no longer join the Mailchimp list.' % where)
+    is_mc = any(re.match(r'mc4wp|mailchimp|mc-embedded', c) for c in (form.get('class') or [])) or 'list-manage.com' in (form.get('action') or '')
+    mc_map = {}
+    if is_mc and not mailchimp_url:
+        report.warn('%s: was a Mailchimp signup. Without --mailchimp it only sends a lead to Deft Core, so new people stop joining the Mailchimp list. '
+                    'deft-move.sh check prints the list address; build again with --mailchimp "<address>".' % where)
     for trap in form.find_all(['input', 'textarea']):
         n = (trap.get('name') or '').lower()
         hidden_box = trap.find_parent(attrs={'aria-hidden': 'true'}) or trap.find_parent(style=re.compile(r'left:\s*-\d{3,}|display:\s*none'))
@@ -342,6 +345,7 @@ def convert_form(form, page_label, report, soup, phone_link, call_only):
             if grp:
                 groups_done.add(grp)
                 groups_done_names[grp] = key
+                mc_map[key] = grp
             field['name'] = key
             rows.append('| %s | %s | `%s` |' % (label, ftype, key))
             continue
@@ -356,6 +360,8 @@ def convert_form(form, page_label, report, soup, phone_link, call_only):
         if key not in ('name', 'phone', 'email', 'service', 'message'):
             labels[key] = label or key.replace('_', ' ').capitalize()
         before = '%s %s' % (field.get('name', '(no name)'), ftype if field.name == 'input' else field.name)
+        if field.get('name'):
+            mc_map[key] = field['name']
         field['name'] = key
         if key == 'phone' and field.name == 'input':
             if ftype != 'tel':
@@ -390,6 +396,11 @@ def convert_form(form, page_label, report, soup, phone_link, call_only):
         form['data-deft-labels'] = json.dumps(labels, separators=(',', ':'))
     if phone_link:
         form['data-deft-phone'] = phone_link
+    if is_mc and mailchimp_url:
+        # The same answers also go to the Mailchimp list, under the field names (merge tags) the signup form used.
+        form['data-deft-mailchimp'] = mailchimp_url
+        form['data-deft-mailchimp-fields'] = json.dumps(mc_map, separators=(',', ':'))
+        report.add('- %s: **also sends to Mailchimp** (%s), as %s' % (where, mailchimp_url.split('?')[0], ', '.join('%s=%s' % kv for kv in mc_map.items())))
 
     status = form.find(class_='form-status')
     if status is None:
@@ -420,7 +431,7 @@ groups_done_names = {}
 
 # ---------- Pages ----------
 
-def convert_page(rel, wp_path, root, paths, report, call_only, forms_js_url):
+def convert_page(rel, wp_path, root, paths, report, call_only, forms_js_url, mailchimp_url=''):
     with open(os.path.join(root, rel), encoding='utf-8', errors='replace') as fh:
         soup = BeautifulSoup(fh.read(), 'html.parser')
     base_dir = posixpath.dirname(rel)
@@ -476,7 +487,7 @@ def convert_page(rel, wp_path, root, paths, report, call_only, forms_js_url):
 
     forms = body.find_all('form')
     for form in forms:
-        convert_form(form, label, report, soup, phone_link, call_only)
+        convert_form(form, label, report, soup, phone_link, call_only, mailchimp_url)
 
     for s in body.find_all('script', src=re.compile(r'jquery|elementor|wp-includes|wp-emoji')):
         report.warn('%s: body script %s looks like WordPress/Elementor and was dropped.' % (label, s['src']))
@@ -540,7 +551,9 @@ def copy_assets(root, outsite, paths, pages, report):
     return copied, size
 
 
-def build(root, domain, out, call_only=False, mapping=None):
+def build(root, domain, out, call_only=False, mapping=None, mailchimp_url=''):
+    if mailchimp_url and not re.match(r'^https://[a-z0-9.-]+\.list-manage\.com/subscribe/post\?u=[0-9a-f]+&id=[0-9a-f]+$', mailchimp_url):
+        raise SystemExit('--mailchimp must look like https://<x>.list-manage.com/subscribe/post?u=<u>&id=<id>')
     root = os.path.abspath(root)
     report = Report()
     global groups_done_names
@@ -566,7 +579,7 @@ def build(root, domain, out, call_only=False, mapping=None):
     page_report = Report()
     converted = []
     for rel in sorted((r for r in pages if r not in skip), key=lambda r: (pages[r] != '', pages[r])):
-        converted.append(convert_page(rel, pages[rel], root, paths, page_report, call_only, forms_js_url))
+        converted.append(convert_page(rel, pages[rel], root, paths, page_report, call_only, forms_js_url, mailchimp_url))
     copied, size = copy_assets(root, outsite, paths, pages, report)
 
     for p in converted:
@@ -617,11 +630,12 @@ def main(argv=None):
     ap.add_argument('--call-only', action='store_true')
     ap.add_argument('--map', action='append', default=[], help='rebuild=wordpress page path, e.g. estimate=free-estimate')
     ap.add_argument('--out', default='out')
+    ap.add_argument('--mailchimp', default='', help='list signup address for forms that were Mailchimp signups (deft-move.sh check prints it)')
     a = ap.parse_args(argv)
     if not re.match(r'^[a-z0-9.-]+\.[a-z]{2,}$', a.domain):
         raise SystemExit('Bad domain: %s' % a.domain)
     mapping = dict(m.split('=', 1) for m in a.map)
-    dest, zpath, warnings = build(a.folder, a.domain, a.out, a.call_only, mapping)
+    dest, zpath, warnings = build(a.folder, a.domain, a.out, a.call_only, mapping, a.mailchimp)
     print('%s\t%s\t%d to check' % (a.domain, zpath, len(warnings)))
 
 
