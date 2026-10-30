@@ -85,11 +85,14 @@ apply() {
   [ "$before" = 200 ] || { say "SKIP $d wp-login.php is $before before we start"; return; }
 
   local bk="$HOME_DIR/backups/$d-$RUN"; mkdir -p "$bk"; chmod 700 "$bk"
+  # Streamed to gzip: writing the dump straight to a file fails silently on Hostinger, stdout works.
   # --no-tablespaces: Hostinger's database users lack the PROCESS privilege newer mysqldump asks for.
-  if ! wpc db export "$bk/db.sql" --no-tablespaces --single-transaction --quiet || [ ! -s "$bk/db.sql" ]; then
-    say "STOP $d database backup failed:"; tail -n 3 "$LOG" | sed 's/^/  /'; return
+  ( set -o pipefail; wpc db export - --no-tablespaces --single-transaction | gzip > "$bk/db.sql.gz" )
+  local rc=$? size; size=$(stat -c %s "$bk/db.sql.gz" 2>/dev/null || echo 0)
+  if [ $rc != 0 ] || [ "$size" -lt 1000 ] || ! zcat "$bk/db.sql.gz" | tail -n 1 | grep -q 'Dump completed'; then
+    say "STOP $d database backup failed (exit $rc, $size bytes):"; tail -n 3 "$LOG" | sed 's/^/  /'; return
   fi
-  gzip "$bk/db.sql" && chmod 600 "$bk/db.sql.gz" || { say "STOP $d database backup could not be packed"; return; }
+  chmod 600 "$bk/db.sql.gz"; say "backup: $bk/db.sql.gz ($size bytes)"
   # Deft Core must be 0.9.6 or later so the extra questions are kept. Update from the client zip if it's older.
   local ver; ver=$(wpc plugin get deft-core --field=version)
   if [ -z "$ver" ] || [ "$(printf '%s\n0.9.6\n' "$ver" | sort -V | head -n1)" != 0.9.6 ]; then
