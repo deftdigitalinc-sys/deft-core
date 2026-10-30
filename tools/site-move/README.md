@@ -37,7 +37,7 @@ MOVE_APPROVED=yes bash ~/deft-move.sh apply amazingglassandmirrors.com
 - **apply** works through these steps:
   1. Backs up the database to `~/deft-move/backups/`, then updates Deft Core to 0.9.6 from `~/deft-move/deft-core-client.zip` if the site runs an older version.
   2. Uploads the files with permissions 755/644, plus a `.htaccess` that stops anything in that folder running as a script.
-  3. Puts every page live through Deft Core, so each one gets a revision, a cache clear and a note to Central.
+  3. Puts every page live through Deft Core, so each one gets a revision, a cache clear and a note to Central. Links between pages are swapped for each page's real address, so a site on `/index.php/` permalinks keeps working.
   4. Checks each page as a visitor would, plus the form script, the endpoint and `wp-login.php`.
   5. Undoes the move by itself if the login page breaks.
 - **undo** puts every page back as it was, Elementor included. Pages the move made are trashed.

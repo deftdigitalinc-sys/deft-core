@@ -49,7 +49,7 @@ unpack() {
   local d=$1 zip="$BUNDLES/$1.zip"
   [ -f "$zip" ] || { say "SKIP $d no bundle at $zip"; return 1; }
   local bad
-  bad=$(unzip -Z1 "$zip" | grep -vE '^(manifest\.json|REPORT\.md|site/[A-Za-z0-9._ ()@%+,~-][A-Za-z0-9._ ()@%+,~/-]*)$' | head -3)
+  bad=$(unzip -Z1 "$zip" | grep -vE '^(manifest\.json|REPORT\.md|site/[A-Za-z0-9._ ()@%+,~=&-][A-Za-z0-9._ ()@%+,~=&/-]*)$' | head -3)
   [ -z "$bad" ] || { say "STOP $d bundle has unexpected entries: $bad"; return 1; }
   if unzip -Z1 "$zip" | grep -E '(^|/)\.\.(/|$)|\.(php[0-9s]?|phtml|phar|pht|cgi|pl|py|sh|htaccess|user\.ini)$|(^|/)\.ht' | grep -q .; then
     say "STOP $d bundle holds a file a server could run"; return 1
@@ -117,12 +117,13 @@ HT
 
   # Checks: every page answers 200 as the Deft page, forms are connected, the form script loads, login still works.
   local fail=0 url
-  for url in $(php -r '$m=json_decode(file_get_contents($argv[1]),true); foreach($m["pages"] as $p){ echo ($p["path"]===""?"":$p["path"]."/"), "|", $p["forms"], "\n"; }' "$WORK/manifest.json"); do
+  for url in $(wpe urls "$WORK/manifest.json"); do
     local path=${url%%|*} forms=${url##*|} page
-    page=$(curl -s -m 25 -L "$(fresh "https://$d/$path")")
-    if ! grep -q 'name="deft-page"' <<<"$page"; then say "FAIL /$path is not showing the Deft page"; fail=1; continue; fi
-    if [ "$forms" != 0 ] && ! grep -q 'data-deft-form' <<<"$page"; then say "FAIL /$path lost its form"; fail=1; fi
-    if grep -qiE 'preview-form|preview only|delivery will be connected' <<<"$page"; then say "FAIL /$path still has preview form text"; fail=1; fi
+    path=${path/#http:/https:}
+    page=$(curl -s -m 25 -L "$(fresh "$path")")
+    if ! grep -q 'name="deft-page"' <<<"$page"; then say "FAIL $path is not showing the Deft page"; fail=1; continue; fi
+    if [ "$forms" != 0 ] && ! grep -q 'data-deft-form' <<<"$page"; then say "FAIL $path lost its form"; fail=1; fi
+    if grep -qiE 'preview-form|preview only|delivery will be connected' <<<"$page"; then say "FAIL $path still has preview form text"; fail=1; fi
   done
   [ "$(code "$(fresh "https://$d/wp-content/uploads/deft-site/deft-forms.js")")" = 200 ] || { say "FAIL deft-forms.js does not load"; fail=1; }
   local ep; ep=$(endpoint "$d"); [ "$ep" = 200 ] || { say "FAIL forms endpoint answers $ep (firewall or Deft Core)"; fail=1; }
@@ -162,8 +163,9 @@ cleanup() {
   say "deleted:${removed:- nothing}"
   wpc litespeed-purge all >/dev/null 2>&1 || true
   local fail=0 path
-  for path in $(php -r '$m=json_decode(file_get_contents($argv[1]),true); foreach($m["pages"] as $p){ echo ($p["path"]===""?"":$p["path"]."/"), "\n"; }' "$WORK/manifest.json") ""; do
-    local c; c=$(code "$(fresh "https://$d/$path")"); [ "$c" = 200 ] || { say "FAIL /$path answers $c"; fail=1; }
+  for path in $(wpe urls "$WORK/manifest.json"); do
+    path=${path%%|*}; path=${path/#http:/https:}
+    local c; c=$(code "$(fresh "$path")"); [ "$c" = 200 ] || { say "FAIL $path answers $c"; fail=1; }
   done
   [ "$(code "$(fresh "https://$d/wp-login.php")")" = 200 ] || { say "FAIL wp-login.php"; fail=1; }
   [ $fail = 0 ] && say "OK $d clean. Exports (private, copy to the Vault): $ex" || say "CHECK $d failures above. Plugins can be reinstalled from wp.org; Elementor's page data is still in the database."

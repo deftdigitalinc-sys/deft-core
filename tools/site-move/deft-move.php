@@ -5,6 +5,7 @@
  *   wp eval-file deft-move.php check   MANIFEST
  *   wp eval-file deft-move.php apply   MANIFEST UNDO_FILE
  *   wp eval-file deft-move.php undo    UNDO_FILE
+ *   wp eval-file deft-move.php urls    MANIFEST      (each page's real address and form count, for the checks)
  *   wp eval-file deft-move.php leftovers MANIFEST
  *   wp eval-file deft-move.php export  OUT_DIR       (writes each old form plugin's stored submissions to CSV)
  *   wp eval-file deft-move.php purge   OUT_DIR       (drops those tables, only if their CSV is complete)
@@ -144,9 +145,10 @@ switch ( $mode ) {
 		usort( $m['pages'], function ( $a, $b ) {
 			return substr_count( $a['path'], '/' ) - substr_count( $b['path'], '/' );
 		} );
-		foreach ( $m['pages'] as $page ) {
-			$id   = $find_page( $page );
-			$note = 'Moved to the rebuilt page (deft-move, ' . $m['source'] . ')';
+		// Pass 1: find or make every page, so the links between them can point at their real addresses.
+		$ids = array();
+		foreach ( $m['pages'] as $i => $page ) {
+			$id = $find_page( $page );
 			if ( ! $id ) {
 				$parent = 0;
 				if ( false !== strpos( $page['path'], '/' ) ) {
@@ -191,8 +193,31 @@ switch ( $mode ) {
 				}
 				delete_post_meta( $id, '_elementor_edit_mode' );
 			}
-			$res = deft_pages_publish( $id, array(
-				'html'    => $page['html'],
+			$ids[ $i ] = $id;
+		}
+		// The rebuild links pages as /about/. A site on plain or /index.php/ permalinks has other addresses, so each
+		// link is swapped for the page's own permalink (a new page is still a draft, so ask as if it were published).
+		$links = array();
+		foreach ( $ids as $i => $id ) {
+			$post              = clone get_post( $id );
+			$post->post_status = 'publish';
+			$links[ trim( $m['pages'][ $i ]['path'], '/' ) ] = wp_make_link_relative( get_permalink( $post ) );
+		}
+		$relink = function ( $html ) use ( $links ) {
+			return preg_replace_callback( '~(\shref=)(["\'])(/[^"\'#?]*)([#?][^"\']*)?\2~i', function ( $mm ) use ( $links ) {
+				$key = trim( $mm[3], '/' );
+				if ( '' === $key || ! isset( $links[ $key ] ) ) {
+					return $mm[0];
+				}
+				return $mm[1] . $mm[2] . $links[ $key ] . ( $mm[4] ?? '' ) . $mm[2];
+			}, $html );
+		};
+		// Pass 2: put every page live.
+		foreach ( $ids as $i => $id ) {
+			$page = $m['pages'][ $i ];
+			$note = 'Moved to the rebuilt page (deft-move, ' . $m['source'] . ')';
+			$res  = deft_pages_publish( $id, array(
+				'html'    => $relink( $page['html'] ),
 				'head'    => $page['head'],
 				'source'  => 'migration',
 				'actor'   => 'Deft move',
@@ -208,6 +233,14 @@ switch ( $mode ) {
 				update_option( 'page_on_front', $id );
 			}
 			$out( 'LIVE  ' . $res['url'] . ' revision ' . $res['revision'] );
+		}
+		break;
+
+	case 'urls':
+		$m = $read_manifest( $args[1] ?? '' );
+		foreach ( $m['pages'] as $page ) {
+			$id = $find_page( $page );
+			$out( ( $id ? get_permalink( $id ) : home_url( '/' . ( '' === $page['path'] ? '' : $page['path'] . '/' ) ) ) . '|' . (int) $page['forms'] );
 		}
 		break;
 
