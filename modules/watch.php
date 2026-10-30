@@ -6,7 +6,7 @@
  * GET /deft/v1/health, signed with the site's Central secret like every request from Central (or opened by Deft staff
  * while logged in). Read-only: it reports and never changes anything. The report has the site's versions and pending
  * updates, plugins, administrators (new ones flagged), signs of spam injection (spam titles, posts with no author, PHP
- * files in uploads, anyone-can-register-as-admin), forms (failed emails, last lead), Deft pages and the Elementor
+ * files in uploads, anyone-can-register-as-admin), forms (failed emails, last lead, forms whose plugin is off), Deft pages and the Elementor
  * move, and WP-Cron. Each problem is also listed in "findings" with a level (bad, warn, info), which Central shows on
  * Today.
  */
@@ -32,6 +32,7 @@ const DEFT_WATCH_TITLES = array(
 	'url_mismatch'      => 'Site addresses don\'t match',
 	'noindex'           => 'Hidden from search engines',
 	'mail_failed'       => 'An email from the site failed',
+	'form_dead'         => 'A form can\'t send',
 	'cron_late'         => 'Scheduled jobs are late',
 );
 
@@ -219,6 +220,10 @@ function deft_watch_report() {
 	if ( ! empty( $mail['last'] ) && strtotime( $mail['last'] ) > time() - 7 * DAY_IN_SECONDS ) {
 		$add( 'warn', 'mail_failed', sprintf( 'An email from the site failed on %s: %s', mysql2date( 'M j', $mail['last'] ), $mail['reason'] ?? '' ) );
 	}
+	$dead_forms = deft_watch_dead_forms();
+	foreach ( $dead_forms as $dead ) {
+		$add( 'bad', 'form_dead', sprintf( 'The %s form on %s shows to visitors, but %s is switched off, so nothing is sent.', $dead['form'], implode( ', ', $dead['pages'] ), $dead['plugin'] ) );
+	}
 
 	// WP-Cron: scheduled jobs that are more than a day late mean nobody visits or cron is broken.
 	$late = 0;
@@ -295,6 +300,7 @@ function deft_watch_report() {
 		'forms'    => array(
 			'last_lead'   => $last_lead ? get_post_time( 'c', true, $last_lead[0] ) : null,
 			'mail_failed' => is_array( $mail ) ? $mail : array(),
+			'dead'        => $dead_forms,
 		),
 		'pages'    => array(
 			'deft'      => $deft_pages,
@@ -305,6 +311,46 @@ function deft_watch_report() {
 			'late'     => $late,
 		),
 	);
+}
+
+/**
+ * Forms that show on a published page but can't send, because the plugin that runs them is switched off (an Elementor
+ * form without Elementor Pro, a WPForms, Forminator or Contact Form 7 shortcode without its plugin). Visitors fill
+ * these in and nothing happens. Returns one entry per form plugin: form, plugin, pages (up to 10 addresses).
+ */
+function deft_watch_dead_forms() {
+	global $wpdb;
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	$kinds = array(
+		array( 'Elementor', 'Elementor Pro', array( 'elementor-pro/elementor-pro.php' ), "m.meta_value LIKE '%\"widgetType\":\"form\"%'" ),
+		array( 'WPForms', 'WPForms', array( 'wpforms-lite/wpforms.php', 'wpforms/wpforms.php' ), "p.post_content LIKE '%[wpforms%' OR p.post_content LIKE '%wp:wpforms/%' OR m.meta_value LIKE '%[wpforms%'" ),
+		array( 'Forminator', 'Forminator', array( 'forminator/forminator.php' ), "p.post_content LIKE '%[forminator_form%' OR m.meta_value LIKE '%[forminator_form%' OR m.meta_value LIKE '%forminator_form%'" ),
+		array( 'Contact Form 7', 'Contact Form 7', array( 'contact-form-7/wp-contact-form-7.php' ), "p.post_content LIKE '%[contact-form-7%' OR m.meta_value LIKE '%[contact-form-7%'" ),
+	);
+	$dead = array();
+	foreach ( $kinds as $kind ) {
+		list( $form, $plugin, $files, $where ) = $kind;
+		if ( array_filter( $files, 'is_plugin_active' ) ) {
+			continue;
+		}
+		// Fixed SQL: no visitor input, only the table names.
+		$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT DISTINCT p.ID FROM {$wpdb->posts} p LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_elementor_data'
+			WHERE p.post_status = 'publish' AND p.post_type NOT IN ('revision','nav_menu_item','deft_lead') AND ( $where ) LIMIT 10" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		);
+		if ( $ids ) {
+			$dead[] = array(
+				'form'   => $form,
+				'plugin' => $plugin,
+				'pages'  => array_map( function ( $id ) {
+					return 'elementor_library' === get_post_type( $id ) ? get_the_title( $id ) . ' (template)' : wp_make_link_relative( get_permalink( $id ) );
+				}, $ids ),
+			);
+		}
+	}
+	return $dead;
 }
 
 /** Published posts of any public type whose title or address reads like spam, and recent posts with no author. */
