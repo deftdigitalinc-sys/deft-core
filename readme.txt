@@ -3,7 +3,7 @@ Contributors: deftdigital
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.9.5
+Stable tag: 0.9.6
 License: GPLv2 or later
 
 Deft Digital's site plugin: makes our designed forms work and reports leads to Deft Central. Piloted on deftdigitalmedia.com, then client sites.
@@ -28,6 +28,10 @@ IP geolocation by DB-IP (db-ip.com), CC BY 4.0. ZIP and county data from GeoName
 Setup and tests: dist/wp/FORMS.md in the Deft website project.
 
 == Changelog ==
+
+= 0.9.6 =
+* Forms designed into the page: the contact form (/wp-json/deft/v1/forms/contact) now keeps any other answers the page sends, so each site's form can ask its own questions (project type, budget, rooms) with no change to the plugin. Up to 20 extra answers, titled in the email and under Leads by the page's _labels or by their name. They go to Deft Central with their labels and into the CSV export as "other answers". Guide: studio/site-forms.md in deft-brain.
+* Site watch: flags a form that shows on a published page while the plugin behind it is off (an Elementor form without Elementor Pro, WPForms, Forminator or Contact Form 7), so a dead form shows up in Central the next morning.
 
 = 0.9.5 =
 * Connect from Deft Central: Central's Connect button uploads wp-content/mu-plugins/deft-central.php, which defines DEFT_CORE_CENTRAL_URL, DEFT_CORE_CENTRAL_SITE_ID and DEFT_CORE_CENTRAL_SECRET. When it's there the site is connected with nothing to paste: leads go to Central, Site watch's inside checks work, and Settings > Deft shows "Set by Deft Central". The file survives plugin updates and keeps the secret out of the database. Delete it to disconnect. The endpoint and site ID can also be set by hand in wp-config.php, like the secret.

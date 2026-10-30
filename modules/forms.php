@@ -11,6 +11,9 @@
  * Every lead also keeps where it came from (_source: the page, referrer and UTM campaign tags) and a unique submission
  * ID (_submission_id, made by the page). A repeat of the same ID (double-click, retry) answers "sent" again without a
  * second lead or email; the ID is also what Deft Central will use to drop duplicates when the sync module arrives.
+ *
+ * Forms with 'extras' on (the contact form) also keep any other field the page sends, so a form designed for one site
+ * can ask its own questions ("project type", "budget") without a change here. See deft_forms_extras().
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -56,6 +59,7 @@ function deft_forms_definitions() {
 			),
 			'one_of'  => array( 'phone', 'email' ),
 			'list'    => array( 'name', 'phone', 'email', 'service' ),
+			'extras'  => true,
 		),
 	);
 	return apply_filters( 'deft_forms', $forms );
@@ -187,6 +191,16 @@ function deft_forms_submit( WP_REST_Request $request ) {
 	}
 	set_transient( $ip_key, $count + 1, 10 * MINUTE_IN_SECONDS );
 
+	$labels = array();
+	foreach ( $form['fields'] as $name => $field ) {
+		$labels[ $name ] = $field['label'];
+	}
+	if ( ! empty( $form['extras'] ) ) {
+		list( $extra_values, $extra_labels ) = deft_forms_extras( $params, $form );
+		$values += $extra_values;
+		$labels += $extra_labels;
+	}
+
 	// Save the lead.
 	$lead_id = wp_insert_post(
 		array(
@@ -201,15 +215,16 @@ function deft_forms_submit( WP_REST_Request $request ) {
 	}
 	update_post_meta( $lead_id, '_deft_form', $key );
 	update_post_meta( $lead_id, '_deft_fields', $values );
+	update_post_meta( $lead_id, '_deft_labels', $labels );
 	update_post_meta( $lead_id, '_deft_submission_id', $submission_id );
 	$source = deft_forms_source( $params['_source'] ?? array(), $request );
 	update_post_meta( $lead_id, '_deft_source', $source );
 
 	// Email the lead, then the auto-reply. A failed email never loses the lead: it's saved and marked under Leads.
 	$lines = array();
-	foreach ( $form['fields'] as $name => $field ) {
-		if ( '' !== $values[ $name ] ) {
-			$lines[] = $field['label'] . ': ' . $values[ $name ];
+	foreach ( $values as $name => $value ) {
+		if ( '' !== $value ) {
+			$lines[] = $labels[ $name ] . ': ' . $value;
 		}
 	}
 	if ( $source ) {
@@ -274,6 +289,35 @@ function deft_forms_error( $code, $message, $status, $fields = array() ) {
 		),
 		$status
 	);
+}
+
+/**
+ * The fields a page sent beyond the form's own list. Names are lowercase letters, digits and underscores; names starting
+ * with an underscore and the website_url honeypot are ours, never answers. A list (checkboxes) becomes "a, b". The page
+ * may send _labels ({name: "Label"}) for how each answer is titled in the email and in WordPress; without one the name
+ * is used ("project_type" becomes "Project type"). At most 20 extra fields of 2000 characters each.
+ * Returns array( values, labels ).
+ */
+function deft_forms_extras( $params, $form ) {
+	$values = array();
+	$labels = array();
+	$given  = isset( $params['_labels'] ) && is_array( $params['_labels'] ) ? $params['_labels'] : array();
+	foreach ( $params as $name => $raw ) {
+		if ( count( $values ) >= 20 ) {
+			break;
+		}
+		if ( ! is_string( $name ) || isset( $form['fields'][ $name ] ) || 'website_url' === $name || ! preg_match( '/^[a-z][a-z0-9_]{0,39}$/', $name ) ) {
+			continue;
+		}
+		$value = deft_forms_clean( $raw, array( 'type' => is_array( $raw ) ? 'list' : 'textarea', 'max' => 2000 ) );
+		if ( '' === $value ) {
+			continue;
+		}
+		$label = isset( $given[ $name ] ) && is_scalar( $given[ $name ] ) ? mb_substr( sanitize_text_field( (string) $given[ $name ] ), 0, 80 ) : '';
+		$values[ $name ] = $value;
+		$labels[ $name ] = '' !== $label ? $label : ucfirst( str_replace( '_', ' ', $name ) );
+	}
+	return array( $values, $labels );
 }
 
 function deft_forms_clean( $value, $field ) {
@@ -413,12 +457,13 @@ function deft_forms_render_lead( $post ) {
 	$key    = get_post_meta( $post->ID, '_deft_form', true );
 	$values = (array) get_post_meta( $post->ID, '_deft_fields', true );
 	$fields = $forms[ $key ]['fields'] ?? array();
+	$saved  = (array) get_post_meta( $post->ID, '_deft_labels', true );
 	echo '<table class="widefat striped"><tbody>';
 	foreach ( $values as $name => $value ) {
 		if ( '' === $value ) {
 			continue;
 		}
-		$label = $fields[ $name ]['label'] ?? $name;
+		$label = $saved[ $name ] ?? $fields[ $name ]['label'] ?? $name;
 		echo '<tr><th style="width:180px">' . esc_html( $label ) . '</th><td>' . nl2br( esc_html( $value ) ) . '</td></tr>';
 	}
 	$source = (array) get_post_meta( $post->ID, '_deft_source', true );
@@ -467,7 +512,7 @@ function deft_forms_export() {
 	header( 'Content-Disposition: attachment; filename=deft-leads-' . gmdate( 'Y-m-d' ) . '.csv' );
 	$out = fopen( 'php://output', 'w' );
 	$tags = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'referrer', 'landing' );
-	fputcsv( $out, array_merge( array( 'received', 'form', 'submission_id' ), $names, $tags ) );
+	fputcsv( $out, array_merge( array( 'received', 'form', 'submission_id' ), $names, array( 'other_answers' ), $tags ) );
 	foreach ( $leads as $lead ) {
 		$values = (array) get_post_meta( $lead->ID, '_deft_fields', true );
 		$source = (array) get_post_meta( $lead->ID, '_deft_source', true );
@@ -475,6 +520,13 @@ function deft_forms_export() {
 		foreach ( $names as $name ) {
 			$row[] = $values[ $name ] ?? '';
 		}
+		// Answers to a site's own questions (extras), as "Label: answer; Label: answer".
+		$labels = (array) get_post_meta( $lead->ID, '_deft_labels', true );
+		$other  = array();
+		foreach ( array_diff_key( $values, array_flip( $names ) ) as $name => $value ) {
+			$other[] = ( $labels[ $name ] ?? $name ) . ': ' . $value;
+		}
+		$row[] = implode( '; ', $other );
 		foreach ( $tags as $tag ) {
 			$row[] = $source[ $tag ] ?? '';
 		}

@@ -203,9 +203,10 @@ function deft_central_payload( $lead_id ) {
 	$forms  = deft_forms_definitions();
 	$key    = get_post_meta( $lead_id, '_deft_form', true );
 	$values = (array) get_post_meta( $lead_id, '_deft_fields', true );
+	$saved  = (array) get_post_meta( $lead_id, '_deft_labels', true );
 	$labels = array();
 	foreach ( $values as $name => $value ) {
-		$labels[ $name ] = $forms[ $key ]['fields'][ $name ]['label'] ?? $name;
+		$labels[ $name ] = $saved[ $name ] ?? $forms[ $key ]['fields'][ $name ]['label'] ?? $name;
 	}
 	// Leads saved before 0.2.0 have no submission ID: give them one now and keep it, so retries still dedupe.
 	$submission_id = get_post_meta( $lead_id, '_deft_submission_id', true );
