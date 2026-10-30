@@ -74,9 +74,11 @@ def clean_text(text):
 
 # ---------- Finding the pages ----------
 
-def find_pages(root, mapping):
-    """{rel_html_path: wp_path}. index.html is the front page (wp_path ''). about.html and about/index.html are 'about'."""
-    pages = {}
+def find_pages(root, mapping, dupes=None):
+    """{rel_html_path: wp_path}. index.html is the front page (wp_path ''). about.html and about/index.html are 'about'.
+    When both exist they would fight over one address: the folder copy (about/index.html) wins and the other is listed
+    in dupes, so the report can say which one went up."""
+    pages, by_path = {}, {}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d.lower() not in SKIP_DIRS and not d.startswith('.') and d != 'assets']
         for name in filenames:
@@ -91,7 +93,15 @@ def find_pages(root, mapping):
                 path = rel[: -len('.html')]
             if path in ('404', '404/index'):
                 continue
-            pages[rel] = mapping.get(path, path)
+            path = mapping.get(path, path)
+            by_path.setdefault(path, []).append(rel)
+    for path, rels in by_path.items():
+        rels.sort(key=lambda r: (not r.endswith('/index.html') and r != 'index.html', r))
+        pages[rels[0]] = path
+        for loser in rels[1:]:
+            if dupes is not None:
+                dupes.append((path, rels[0], loser))
+            pages[loser] = path  # still a page for link-rewriting, but never published (see build)
     return pages
 
 
@@ -449,8 +459,19 @@ def convert_page(rel, wp_path, root, paths, report, call_only, forms_js_url):
     # The rebuilds carry "preview only / not sent" notices for review; they must not reach the live site.
     for note in body.find_all(class_=re.compile(r'preview-note|preview-notice|form-preview')):
         note.decompose()
-    for node in body.find_all(string=re.compile(r'preview only|has not been sent|delivery will be connected|no request has been sent', re.I)):
-        if node.parent and node.parent.name not in ('script', 'style'):
+    notice = re.compile(r'preview (form|only|notice|build)|(will be|not yet) connected|has not been sent|no request has been sent|delivery will be|sending will be', re.I)
+    for node in body.find_all(string=notice):
+        el = node.parent
+        if el is None or el.name in ('script', 'style'):
+            continue
+        # Take out the smallest element that holds just the notice; never a block that also holds fields or links.
+        while el.parent is not None and el.name in ('strong', 'em', 'b', 'i', 'span') and len(clean_text(el.parent.get_text(' '))) < 250:
+            el = el.parent
+        text = clean_text(el.get_text(' '))
+        if len(text) < 250 and not el.find(['input', 'select', 'textarea', 'button', 'a', 'form']) and el.name not in ('body', 'form', 'main', 'section'):
+            report.add('- %s: removed the review notice "%s"' % (label, text[:100]))
+            el.decompose()
+        else:
             report.warn('%s: a preview notice is still in the page: "%s". Remove it by hand.' % (label, clean_text(node)[:80]))
 
     forms = body.find_all('form')
@@ -524,7 +545,11 @@ def build(root, domain, out, call_only=False, mapping=None):
     report = Report()
     global groups_done_names
     groups_done_names = {}
-    pages = find_pages(root, mapping or {})
+    dupes = []
+    pages = find_pages(root, mapping or {}, dupes)
+    skip = {loser for _, _, loser in dupes}
+    for path, kept, loser in dupes:
+        report.warn('Two rebuild files for /%s/: %s went up, %s did not. They differ, so check the right one went up (or delete the other and run again).' % (path, kept, loser))
     if 'index.html' not in pages:
         raise SystemExit('No index.html in %s' % root)
     paths = Paths(root, pages, report)
@@ -540,7 +565,7 @@ def build(root, domain, out, call_only=False, mapping=None):
 
     page_report = Report()
     converted = []
-    for rel in sorted(pages, key=lambda r: (pages[r] != '', pages[r])):
+    for rel in sorted((r for r in pages if r not in skip), key=lambda r: (pages[r] != '', pages[r])):
         converted.append(convert_page(rel, pages[rel], root, paths, page_report, call_only, forms_js_url))
     copied, size = copy_assets(root, outsite, paths, pages, report)
 

@@ -19,6 +19,8 @@ What it changes:
 - **Head:** keeps the styles and scripts. Drops the title, canonical, Open Graph and robots tags, because WordPress and Deft Core print those.
 - **Paths:** every local file moves under `/wp-content/uploads/deft-site/`. Links between pages use the WordPress addresses (`/about/`, not `about.html`).
 - **Forms:** each field gets a name from its label. Plugin tokens, old spam traps and file uploads are removed. A honeypot and a status line are added, and `deft-forms.js` posts the form to `/wp-json/deft/v1/forms/contact`. The "preview only" notices from the rebuild are removed.
+- **Two files for one page** (`about.html` and `about/index.html`): the folder copy goes up and the report says so.
+- **Review notices** left in the rebuild ("Preview form, sending will be connected…") are taken out.
 - **Uploads:** only plain web files go up. A `.php` file, or anything else a server could run, is refused.
 
 ## 2. Put it live (on the server, with Daniel's OK naming the sites)
@@ -32,7 +34,7 @@ MOVE_APPROVED=yes bash ~/deft-move.sh apply amazingglassandmirrors.com
 
 - **check** is read-only. It shows which WordPress page each rebuilt page lands on, any page that would be new, where leads go, which plugins are on, and whether the forms endpoint answers (with a send Deft Core drops, so no lead is made). It also lists what still uses Elementor or a form plugin.
 - **apply** works through these steps:
-  1. Backs up the database to `~/deft-move/backups/`.
+  1. Backs up the database to `~/deft-move/backups/`, then updates Deft Core to 0.9.6 from `~/deft-move/deft-core-client.zip` if the site runs an older version.
   2. Uploads the files with permissions 755/644, plus a `.htaccess` that stops anything in that folder running as a script.
   3. Puts every page live through Deft Core, so each one gets a revision, a cache clear and a note to Central.
   4. Checks each page as a visitor would, plus the form script, the endpoint and `wp-login.php`.

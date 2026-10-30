@@ -7,7 +7,8 @@
 #
 #   bash ~/deft-move.sh check SITE...       read-only: page matching, Deft Core version, where leads go, what's left
 #   MOVE_APPROVED=yes bash ~/deft-move.sh apply SITE...
-#                                           backup, upload the files, put every page live, purge cache, test
+#                                           backup, Deft Core to 0.9.6 if older (from ~/deft-move/deft-core-client.zip),
+#                                           upload the files, put every page live, purge cache, test
 #   bash ~/deft-move.sh undo SITE           puts the pages back exactly as before the last apply
 #   CLEANUP_APPROVED=yes bash ~/deft-move.sh cleanup SITE...
 #                                           after the phone test send: export old form submissions (CSV, private),
@@ -23,6 +24,7 @@ HOME_DIR="$HOME/deft-move"
 BUNDLES="$HOME_DIR/bundles"
 HERE=$(cd "$(dirname "$0")" && pwd)
 PHP_FILE=${PHP_FILE:-$HERE/deft-move.php}
+CORE_ZIP=${CORE_ZIP:-$HOME/deft-move/deft-core-client.zip}   # Deft Core 0.9.6+ (dist\wp\deft-core-client.zip)
 RUN=$(date -u +%Y%m%dT%H%MZ)
 mkdir -p "$HOME_DIR"/{bundles,work,backups,undo,exports,logs}
 chmod 700 "$HOME_DIR" "$HOME_DIR"/{backups,undo,exports}
@@ -84,6 +86,15 @@ apply() {
 
   local bk="$HOME_DIR/backups/$d-$RUN"; mkdir -p "$bk"; chmod 700 "$bk"
   wpc db export "$bk/db.sql" --quiet && gzip "$bk/db.sql" && chmod 600 "$bk/db.sql.gz" || { say "STOP $d database backup failed"; return; }
+  # Deft Core must be 0.9.6 or later so the extra questions are kept. Update from the client zip if it's older.
+  local ver; ver=$(wpc plugin get deft-core --field=version)
+  if [ -z "$ver" ] || [ "$(printf '%s\n0.9.6\n' "$ver" | sort -V | head -n1)" != 0.9.6 ]; then
+    [ -f "$CORE_ZIP" ] || { say "SKIP $d Deft Core is ${ver:-missing}; put the 0.9.6 client zip at $CORE_ZIP"; return; }
+    wpc plugin install "$CORE_ZIP" --force --activate >> "$LOG" || { say "STOP $d Deft Core update failed"; return; }
+    find "$ROOT/wp-content/plugins/deft-core" -type d -exec chmod 755 {} + ; find "$ROOT/wp-content/plugins/deft-core" -type f -exec chmod 644 {} +
+    say "deft-core ${ver:-none} -> $(wpc plugin get deft-core --field=version)"
+  fi
+
   local up="$ROOT/wp-content/uploads/deft-site"
   [ -d "$up" ] && mv "$up" "$bk/deft-site"
 
@@ -165,6 +176,6 @@ case "$MODE" in
   undo)    [ $# -gt 0 ] || { echo "name the site"; exit 3; }; for d in "$@"; do undo "$d"; done ;;
   cleanup) [ "${CLEANUP_APPROVED-}" = yes ] || { echo "STOP cleanup needs CLEANUP_APPROVED=yes"; exit 3; }
            [ $# -gt 0 ] || { echo "name the sites"; exit 3; }; for d in "$@"; do cleanup "$d"; done ;;
-  *) sed -n '2,22p' "$0"; exit 1 ;;
+  *) sed -n "2,23p" "$0"; exit 1 ;;
 esac
 echo "log: $LOG"

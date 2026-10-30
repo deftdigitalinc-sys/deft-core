@@ -23,7 +23,9 @@ INDEX = '''<!doctype html><html><head><title>Home - Acme Glass</title><meta char
 ABOUT = '''<html><head><title>About</title></head><body><form class="mc4wp-form"><p><label>First Name</label><input name="FNAME"></p>
 <p><label>Last Name</label><input name="LNAME"></p><p><label>Email address: <input type="email" name="EMAIL"></label></p>
 <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_123abc_456def" tabindex="-1"></div>
-<textarea name="msg" placeholder="How can we help?"></textarea><input type="submit" value="Go"></form></body></html>'''
+<textarea name="msg" placeholder="How can we help?"></textarea><input type="submit" value="Go">
+<p class="note"><em>Preview form — sending will be connected when the upload method is confirmed.</em></p></form></body></html>'''
+ABOUT_FOLDER = '<html><body><h1>About (folder copy)</h1></body></html>'
 SERVICES = '<html><body><a href="../index.html">Home</a><a href="tel:5615550000">Call</a><form><input name="x" placeholder="Name"></form></body></html>'
 
 
@@ -31,8 +33,9 @@ class Base(unittest.TestCase):
     def build(self, call_only=False):
         self.tmp = tempfile.mkdtemp()
         src = os.path.join(self.tmp, 'src')
-        os.makedirs(os.path.join(src, 'assets')); os.makedirs(os.path.join(src, 'services'))
-        for name, body in (('index.html', INDEX), ('about.html', ABOUT), ('services/index.html', SERVICES),
+        for d in ('assets', 'services', 'about'):
+            os.makedirs(os.path.join(src, d))
+        for name, body in (('index.html', INDEX), ('about.html', ABOUT), ('services/index.html', SERVICES), ('about/index.html', ABOUT_FOLDER),
                            ('assets/a.css', 'body{background:url(/assets/logo.png)} i{background:url(logo.png)}'),
                            ('assets/logo.png', 'png'), ('assets/logo@2x.png', 'png'), ('shell.php', '<?php'), ('README.md', 'x')):
             with open(os.path.join(src, name), 'w') as fh:
@@ -45,6 +48,12 @@ class Base(unittest.TestCase):
 
 
 class Convert(Base):
+    def build_flat(self):
+        os.remove(os.path.join(self.tmp, 'src', 'about', 'index.html'))
+        dest, zpath, self.warnings = deft_move.build(os.path.join(self.tmp, 'src'), 'acmeglass.com', os.path.join(self.tmp, 'out2'))
+        with open(os.path.join(dest, 'manifest.json')) as fh:
+            self.pages = {p['path']: p for p in json.load(fh)['pages']}
+
     def setUp(self):
         self.build()
 
@@ -79,12 +88,20 @@ class Convert(Base):
         self.assertNotIn('delivery will be connected', html)
         self.assertTrue(any('file upload' in w for w in self.warnings))
 
+    def test_duplicate_page_files(self):
+        self.assertIn('folder copy', self.pages['about']['html'])
+        self.assertEqual(sum(1 for p in self.m['pages'] if p['path'] == 'about'), 1)
+        self.assertTrue(any('Two rebuild files for /about/' in w for w in self.warnings))
+
     def test_mailchimp_form(self):
+        self.build_flat()
         form = self.pages['about']['html']
         for n in ('first_name', 'last_name', 'email', 'message'):
             self.assertIn('name="%s"' % n, form)
         self.assertNotIn('b_123abc_456def', form)
         self.assertTrue(any('Mailchimp' in w for w in self.warnings))
+        self.assertNotIn('sending will be connected', form)
+        self.assertIn('name="email"', form)
 
     def test_missing_contact_field_warns(self):
         self.assertTrue(any('/services/' in w and 'no phone or email' in w for w in self.warnings))
