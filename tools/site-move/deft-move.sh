@@ -129,7 +129,8 @@ Options -Indexes -ExecCGI
 HT
   find "$up" -type d -exec chmod 755 {} + ; find "$up" -type f -exec chmod 644 {} +
 
-  wpe apply "$WORK/manifest.json" "$HOME_DIR/undo/$d.json" | tee -a "$LOG"
+  local res; res=$(wpe apply "$WORK/manifest.json" "$HOME_DIR/undo/$d.json"); echo "$res" | tee -a "$LOG"
+  if grep -q '^STOP' <<<"$res"; then say "STOP $d no page was changed"; return; fi
   cp "$HOME_DIR/undo/$d.json" "$HOME_DIR/undo/$d-$RUN.json" 2>/dev/null
   wpc litespeed-purge all >/dev/null 2>&1 || true
 
