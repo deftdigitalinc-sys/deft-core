@@ -509,7 +509,7 @@ def convert_page(rel, wp_path, root, paths, report, call_only, forms_js_url, mai
         'description': description,
         'head': '\n'.join(head_parts),
         'html': inner,
-        'forms': len(forms),
+        'forms': 0 if call_only else len(forms),  # a call-only page has Call buttons, not forms
     }
 
 

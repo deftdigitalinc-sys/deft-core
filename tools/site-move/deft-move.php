@@ -240,7 +240,7 @@ switch ( $mode ) {
 		$m = $read_manifest( $args[1] ?? '' );
 		foreach ( $m['pages'] as $page ) {
 			$id = $find_page( $page );
-			$out( ( $id ? get_permalink( $id ) : home_url( '/' . ( '' === $page['path'] ? '' : $page['path'] . '/' ) ) ) . '|' . (int) $page['forms'] );
+			$out( ( $id ? get_permalink( $id ) : home_url( '/' . ( '' === $page['path'] ? '' : $page['path'] . '/' ) ) ) . '|' . ( empty( $m['call_only'] ) ? (int) $page['forms'] : 0 ) );
 		}
 		break;
 
